@@ -47,7 +47,7 @@ First, clone the new fork from your own account and create a new environment wit
 mkdir -p ~/repos && cd repos
 git clone https://github.com/<YOUR-USERNAME>/lsy_drone_racing.git
 cd lsy_drone_racing
-conda conda env create -f environment.yaml
+conda env create -f environment.yaml
 conda activate drone
 ```
 
