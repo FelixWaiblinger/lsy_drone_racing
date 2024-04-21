@@ -72,8 +72,28 @@ cd ~/repos
 git clone https://github.com/utiasDSL/pycffirmware.git
 cd pycffirmware
 git submodule update --init --recursive
-./wrapper/build_linux.sh
 ```
+Install SWIG for your machine. Ensure that the install location is added to your path variable.
+  
+  ```bash
+sudo apt update
+sudo apt -y install swig
+```
+Install the `NumPy`, `gcc` and `make`
+  
+  ```bash
+pip install numpy
+sudo apt install build-essential
+```
+
+Navigate to and run the build script
+  
+  ```bash
+  cd wrapper
+chmod +x build_linux.sh
+./build_linux.sh
+```
+
 Finally, you can test if the installation was successful by running 
 
 ```bash
