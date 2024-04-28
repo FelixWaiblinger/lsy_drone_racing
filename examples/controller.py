@@ -191,8 +191,10 @@ class Controller(BaseController):
             step = iteration - 2 * self.CTRL_FREQ  # Account for 2s delay due to takeoff
             if ep_time - 2 > 0 and step < len(self.ref_x):
                 target_pos = np.array([self.ref_x[step], self.ref_y[step], self.ref_z[step]])
+                #print(f"Step: {step}, Target: {target_pos}")
+                print(f"Current position: {obs[0], obs[2], obs[4]}")
                 target_vel = np.zeros(3)
-                target_acc = np.zeros(3)
+                target_acc = np.ones(3) * 0.5
                 target_yaw = 0.0
                 target_rpy_rates = np.zeros(3)
                 command_type = Command.FULLSTATE
