@@ -21,6 +21,7 @@ import numpy as np
 import rospy
 from safe_control_gym.utils.registration import make
 
+from lsy_drone_racing.constants import FIRMWARE_FREQ
 from lsy_drone_racing.command import Command, apply_command
 from lsy_drone_racing.constants import (
     CTRL_FREQ,

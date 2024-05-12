@@ -1,89 +1,67 @@
+""""""
+
 from __future__ import annotations
 
 import logging
-# import time
 from functools import partial
 from pathlib import Path
 
-# import fire
-import numpy as np
-import pybullet as p
+import fire
 import yaml
-from munch import Munch, munchify
+from munch import munchify
 from safe_control_gym.utils.registration import make
-from safe_control_gym.utils.utils import sync
-from safe_control_gym.controllers.ppo.ppo import PPO
-# from stable_baselines3.common.env_checker import check_env
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_checker import check_env
+from stable_baselines3.common.evaluation import evaluate_policy
 
-from lsy_drone_racing.command import apply_sim_command
-from lsy_drone_racing.utils import load_controller
+from lsy_drone_racing.constants import FIRMWARE_FREQ
+from lsy_drone_racing.wrapper import DroneRacingWrapper
 
 
 logger = logging.getLogger(__name__)
 
-config: str = "config/getting_started.yaml"
-gui: bool = True
-save_path = "./test"
-
-# Load configuration and check if firmare should be used.
-path = Path(config)
-assert path.exists(), f"Configuration file not found: {path}"
-with open(path, "r") as file:
-    config = munchify(yaml.safe_load(file))
-# Overwrite config options
-config.quadrotor_config.gui = gui
-CTRL_FREQ = config.quadrotor_config["ctrl_freq"]
-CTRL_DT = 1 / CTRL_FREQ
-
-# Create environment.
-assert config.use_firmware, "Firmware must be used for the competition."
-FIRMWARE_FREQ = 500
-pyb_freq = config.quadrotor_config["pyb_freq"]
-assert pyb_freq % FIRMWARE_FREQ == 0, "pyb_freq must be a multiple of firmware freq"
-# The env.step is called at a firmware_freq rate, but this is not as intuitive to the end
-# user, and so we abstract the difference. This allows ctrl_freq to be the rate at which the
-# user sends ctrl signals, not the firmware.
-config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
-env_func = partial(make, "quadrotor", **config.quadrotor_config)
-wrapped_env = make("firmware", env_func, FIRMWARE_FREQ, CTRL_FREQ)
-env = wrapped_env.env
+SAVE_PATH = "./test"
+TRAIN = False
+TRAIN_STEPS = 1000
 
 
-# test environment
-# check_env(env)
+def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
+    """Create the drone racing environment."""
+    # Load configuration and check if firmare should be used.
+    assert config_path.exists(), f"Configuration file not found: {config_path}"
+    with open(config_path, "r", encoding='utf-8') as file:
+        config = munchify(yaml.safe_load(file))
+    # Overwrite config options
+    config.quadrotor_config.gui = gui
+    CTRL_FREQ = config.quadrotor_config["ctrl_freq"]
+    # Create environment
+    assert config.use_firmware, "Firmware must be used for the competition."
+    pyb_freq = config.quadrotor_config["pyb_freq"]
+    assert pyb_freq % FIRMWARE_FREQ == 0, "pyb_freq must be a multiple of firmware freq"
+    config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
+    env_factory = partial(make, "quadrotor", **config.quadrotor_config)
+    firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
+    return DroneRacingWrapper(firmware_env, terminate_on_lap=True)
 
-params = {
-    # environment
-    "rollout_batch_size": 1,
-    "num_workers": 1,
-    "deque_size": 1,
-    # agent
-    "hidden_dim": 256,
-    "use_clipped_value": False,
-    "clip_param": ...,
-    "target_kl": ...,
-    "entropy_coef": ...,
-    "actor_lr": 1e-4,
-    "critic_lr": 1e-4,
-    "opt_epochs": ...,
-    "mini_batch_size": 1,
-    # training
-    "max_env_steps": 1000,
-    "save_interval": 100,
-    "num_checkpoints": 10,
-    "eval_interval": 100,
-    "eval_save_best": True,
-    # running
-    "rollout_steps": 10,
-}
 
-model = PPO(env_func, **params)
+def train(config: str = "config/getting_started.yaml", gui: bool = False):
+    """Create the environment, check its compatibility with sb3, and run a PPO agent."""
+    logging.basicConfig(level=logging.INFO)
+    config_path = Path(__file__).resolve().parents[1] / config
+    env = create_race_env(config_path=config_path, gui=gui)
+    check_env(env)  # Sanity check to ensure the environment conforms to the sb3 API
+    agent = PPO("MlpPolicy", env, verbose=1)
+    agent.learn(total_timesteps=TRAIN_STEPS)
+    agent.save(SAVE_PATH)
 
-model.reset()
 
-model.learn(env)
-
-model.save(save_path)
-
-model.close()
-env.close()
+if __name__ == "__main__":
+    if TRAIN:
+        fire.Fire(train)
+    else:
+        path_to_config = Path(__file__).resolve().parents[1] / "config/getting_started.yaml"
+        test_env = create_race_env(config_path=path_to_config, gui=False)
+        model = PPO.load(SAVE_PATH, test_env)
+        mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=10)
+        print(f"{mean_reward = }")
+        print(f"{std_reward = }")
