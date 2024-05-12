@@ -93,6 +93,8 @@ def simulate(
         obs, info = env.reset()
         info["ctrl_timestep"] = CTRL_DT
         info["ctrl_freq"] = CTRL_FREQ
+        # NOTE: not sure whether it is the cleanest way, but now the controller knows about the environment he's in
+        info["env"] = env
         lap_finished = False
         # obs = [x, x_dot, y, y_dot, z, z_dot, phi, theta, psi, p, q, r]
         ctrl = ctrl_class(obs, info, verbose=config.verbose)
@@ -125,10 +127,11 @@ def simulate(
             ctrl.step_learn(action, obs, reward, done, info)
             # Add up reward, collisions, violations.
             stats["ep_reward"] += reward
-            if info["collision"][1]:
-                stats["collisions"] += 1
-                stats["collision_objects"].add(info["collision"][0])
-            stats["violations"] += "constraint_violation" in info and info["constraint_violation"]
+            # NOTE: for some reason this throws errors in the new environment (?)
+            # if info["collision"][1]:
+            #     stats["collisions"] += 1
+            #     stats["collision_objects"].add(info["collision"][0])
+            # stats["violations"] += "constraint_violation" in info and info["constraint_violation"]
 
             # Synchronize the GUI.
             if config.quadrotor_config.gui:
