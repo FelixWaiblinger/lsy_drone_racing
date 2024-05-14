@@ -20,9 +20,9 @@ from lsy_drone_racing.wrapper import DroneRacingWrapper
 
 logger = logging.getLogger(__name__)
 
-SAVE_PATH = "./test"
-TRAIN = False
-TRAIN_STEPS = 1000
+SAVE_PATH = "./test2"
+TRAIN = True
+TRAIN_STEPS = 10000
 
 
 def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
@@ -62,6 +62,6 @@ if __name__ == "__main__":
         path_to_config = Path(__file__).resolve().parents[1] / "config/getting_started.yaml"
         test_env = create_race_env(config_path=path_to_config, gui=False)
         model = PPO.load(SAVE_PATH, test_env)
-        mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=10)
+        mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=10, deterministic=False)
         print(f"{mean_reward = }")
         print(f"{std_reward = }")
