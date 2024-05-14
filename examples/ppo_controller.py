@@ -79,7 +79,7 @@ class Controller(BaseController):
         # REPLACE THIS (START) ##
         #########################
 
-        self.model = PPO.load("./test", initial_info["env"])
+        self.model = PPO.load("./test2", initial_info["env"])
 
         #########################
         # REPLACE THIS (END) ####
