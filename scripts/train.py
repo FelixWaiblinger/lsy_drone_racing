@@ -1,4 +1,4 @@
-""""""
+"""Training and Evaluation"""
 
 from __future__ import annotations
 
@@ -15,14 +15,14 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import DroneRacingWrapper
+from lsy_drone_racing.wrapper import DroneRacingWrapper, DroneRacingRewardWrapper
 
 
 logger = logging.getLogger(__name__)
 
-SAVE_PATH = "./test2"
-TRAIN = False
-TRAIN_STEPS = 10000
+SAVE_PATH = "./test3"
+TASK = "eval" # one of [train, retrain, eval]
+TRAIN_STEPS = 50000
 
 
 def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
@@ -41,28 +41,46 @@ def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
     config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
     env_factory = partial(make, "quadrotor", **config.quadrotor_config)
     firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
-    return DroneRacingWrapper(firmware_env, terminate_on_lap=True)
+    drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
+    return DroneRacingRewardWrapper(drone_racing_env)
 
 
-def train(config: str = "config/getting_started.yaml", gui: bool = False):
+def train(
+    config: str = "config/getting_started.yaml",
+    gui: bool = False,
+    resume: bool = False
+):
     """Create the environment, check its compatibility with sb3, and run a PPO agent."""
     logging.basicConfig(level=logging.INFO)
     config_path = Path(__file__).resolve().parents[1] / config
     env = create_race_env(config_path=config_path, gui=gui)
     check_env(env)  # Sanity check to ensure the environment conforms to the sb3 API
-    agent = PPO("MlpPolicy", env, verbose=1)
-    agent.learn(total_timesteps=TRAIN_STEPS)
+
+    if resume:
+        print("Continuing...")
+        agent = PPO.load(SAVE_PATH, env)
+    else:
+        print("Training new agent...")
+        agent = PPO("MlpPolicy", env, verbose=1)
+    agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True)
     agent.save(SAVE_PATH)
 
 
 if __name__ == "__main__":
-    if TRAIN:
+    if TASK == "train":
         fire.Fire(train)
+    elif TASK == "retrain":
+        fire.Fire(train, command=["--resume", "True"])
     else:
         path_to_config = Path(__file__).resolve().parents[1] / "config/getting_started.yaml"
-        test_env = create_race_env(config_path=path_to_config, gui=False)
+        test_env = create_race_env(config_path=path_to_config, gui=True)
         model = PPO.load(SAVE_PATH, test_env)
         # print(model.observation_space)
-        mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=10, deterministic=False)
+        mean_reward, std_reward = evaluate_policy(
+            model,
+            model.get_env(),
+            n_eval_episodes=10,
+            deterministic=False
+        )
         print(f"{mean_reward = }")
         print(f"{std_reward = }")

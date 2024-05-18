@@ -404,3 +404,47 @@ class RewardWrapper(Wrapper):
         gate_passed_reward = 0 if gate_id == self._last_gate else 0.1
         crash_penality = -1 if terminated and not info["task_completed"] else 0
         return gate_reward + crash_penality + gate_passed_reward
+
+
+class DroneRacingRewardWrapper(Wrapper):
+    """Drone racing wrapper wrapper to customize the reward function.
+
+    This wrapper overrides the reward signal generated in the firmware
+    environment with a custom version that may take additional information into
+    account.
+    """
+
+    def __init__(self, env: DroneRacingWrapper):
+        """Initialize the wrapper.
+
+        Args:
+            env: The drone racing wrapper.
+        """
+
+        super().__init__(env)
+
+    def step(self,
+        action: np.ndarray
+    ) -> tuple[np.ndarray, float, bool, bool, dict]:
+        """Take a step in the environment.
+
+        Args:
+            action: The action to take in the environment.
+            See action space for details.
+
+        Returns:
+            The next observation, the customized reward, the terminated and
+            truncated flags, and the info dict.
+        """
+
+        obs, reward, terminated, truncated, info = self.env.step(action)
+
+        # TODO: needs fine-tuning
+        reward_lap = 20 if terminated and info["task_completed"] else 0
+        reward_collision = -10 if terminated and info["collision"][1] else 0
+        reward_time = -0.1 if not terminated and not truncated else 0
+        reward_distance = 0 # compute distance to next target
+
+        reward = reward_lap + reward_collision + reward_time + reward_distance
+
+        return obs, reward, terminated, truncated, info
