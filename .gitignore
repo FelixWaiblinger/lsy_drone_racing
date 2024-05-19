@@ -6,3 +6,5 @@ logs
 secrets
 **/*.secret
 saves
+ppo_drones_tensorboard/
+test*.zip

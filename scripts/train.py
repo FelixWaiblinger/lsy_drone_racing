@@ -20,9 +20,11 @@ from lsy_drone_racing.wrapper import DroneRacingWrapper, DroneRacingRewardWrappe
 
 logger = logging.getLogger(__name__)
 
-SAVE_PATH = "./test3"
-TASK = "eval" # one of [train, retrain, eval]
-TRAIN_STEPS = 50000
+SAVE_PATH = "./test5"
+TASK = "eval" # one of [train, retrain, ]
+TRAIN_STEPS = 100000
+LOG_FOLDER = "./ppo_drones_tensorboard/"
+LOG_NAME = "ppo_test"
 
 
 def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
@@ -61,8 +63,8 @@ def train(
         agent = PPO.load(SAVE_PATH, env)
     else:
         print("Training new agent...")
-        agent = PPO("MlpPolicy", env, verbose=1)
-    agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True)
+        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)
+    agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True, tb_log_name=LOG_NAME)
     agent.save(SAVE_PATH)
 
 
@@ -75,7 +77,6 @@ if __name__ == "__main__":
         path_to_config = Path(__file__).resolve().parents[1] / "config/getting_started.yaml"
         test_env = create_race_env(config_path=path_to_config, gui=True)
         model = PPO.load(SAVE_PATH, test_env)
-        # print(model.observation_space)
         mean_reward, std_reward = evaluate_policy(
             model,
             model.get_env(),

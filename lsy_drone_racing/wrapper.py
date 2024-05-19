@@ -183,7 +183,6 @@ class DroneRacingWrapper(Wrapper):
         self._drone_pose = obs[[0, 1, 2, 5]]
         if obs not in self.observation_space:
             terminated = True
-            reward = -1
         self._reset_required = terminated or truncated
         return obs, reward, terminated, truncated, info
 
@@ -422,6 +421,21 @@ class DroneRacingRewardWrapper(Wrapper):
         """
 
         super().__init__(env)
+        self.current_gate = 0
+
+    def reset(self, *args: Any, **kwargs: dict[str, Any]) -> tuple[np.ndarray, dict]:
+        """Reset the environment.
+
+        Args:
+            args: Positional arguments to pass to the firmware wrapper.
+            kwargs: Keyword arguments to pass to the firmware wrapper.
+
+        Returns:
+            The transformed observation and the info dict.
+        """
+        obs, info = self.env.reset(*args, **kwargs)
+        self.current_gate = 0 # reset gate counter
+        return obs, info
 
     def step(self,
         action: np.ndarray
@@ -439,12 +453,38 @@ class DroneRacingRewardWrapper(Wrapper):
 
         obs, reward, terminated, truncated, info = self.env.step(action)
 
-        # TODO: needs fine-tuning
-        reward_lap = 20 if terminated and info["task_completed"] else 0
-        reward_collision = -10 if terminated and info["collision"][1] else 0
-        reward_time = -0.1 if not terminated and not truncated else 0
-        reward_distance = 0 # compute distance to next target
+        gate_id = info["current_gate_id"]
+        gate_position = info["gates_pose"][gate_id, :3]
+        drone_position = obs[:3]
+        distance = gate_position - drone_position
 
-        reward = reward_lap + reward_collision + reward_time + reward_distance
+        # print(action)
+        # print(gate_position)
+
+        # reward passing the next gate
+        if gate_id > self.current_gate: # drone passed a gate
+            reward_gate = 10
+            self.current_gate = gate_id
+        else:
+            reward_gate = 0
+
+        # reward finishing an entire lap
+        reward_lap = 100 if terminated and info["task_completed"] else 0
+
+        # punish a collision
+        reward_collision = -300 if terminated and info["collision"][1] else 0
+
+        # punish flying out of bounds
+        reward_bounds = -300 if any(drone_position > 4) else 0
+
+        # punish hovering
+        reward_time = -0.01 if not terminated and not truncated else 0
+
+        # reward moving towards the next target
+        reward_distance = 3 - np.linalg.norm(distance, ord=2)
+
+        # combine rewards
+        reward = reward_lap + reward_gate + reward_collision + \
+                 reward_bounds + reward_time + reward_distance
 
         return obs, reward, terminated, truncated, info
