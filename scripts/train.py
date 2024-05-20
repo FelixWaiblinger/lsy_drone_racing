@@ -6,7 +6,6 @@ import logging
 from functools import partial
 from pathlib import Path
 
-
 import fire
 import yaml
 from munch import munchify
@@ -18,12 +17,10 @@ from stable_baselines3.common.evaluation import evaluate_policy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
 from lsy_drone_racing.wrapper import DroneRacingWrapper, DroneRacingRewardWrapper
 
-
 logger = logging.getLogger(__name__)
 
-SAVE_PATH = "./test3"
-TASK = "eval" # one of [train, retrain, eval]
-TRAIN_STEPS = 50000
+SAVE_PATH = "./test1"
+TRAIN_STEPS = 100
 
 
 def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
@@ -62,26 +59,32 @@ def train(
         agent = PPO.load(SAVE_PATH, env)
     else:
         print("Training new agent...")
-        agent = PPO("MlpPolicy", env, verbose=1)
+        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./tensorboard")
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True)
     agent.save(SAVE_PATH)
 
 
-if __name__ == "__main__":
-    if TASK == "train":
-        fire.Fire(train)
-    elif TASK == "retrain":
-        fire.Fire(train, command=["--resume", "True"])
+def evaluate():
+    """Evaluate the trained model."""
+    path_to_config = Path(__file__).resolve().parents[1] / "config/level0.yaml"
+    test_env = create_race_env(config_path=path_to_config, gui=True)
+    model = PPO.load(SAVE_PATH, test_env)
+    mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=10, deterministic=False)
+    print(f"{mean_reward = }")
+    print(f"{std_reward = }")
+
+
+def main(task: str):
+    """Main function to handle task selection."""
+    if task == "train":
+        train()
+    elif task == "retrain":
+        train(resume=True)
+    elif task == "eval":
+        evaluate()
     else:
-        path_to_config = Path(__file__).resolve().parents[1] / "config/getting_started.yaml"
-        test_env = create_race_env(config_path=path_to_config, gui=True)
-        model = PPO.load(SAVE_PATH, test_env)
-        # print(model.observation_space)
-        mean_reward, std_reward = evaluate_policy(
-            model,
-            model.get_env(),
-            n_eval_episodes=10,
-            deterministic=False
-        )
-        print(f"{mean_reward = }")
-        print(f"{std_reward = }")
+        raise ValueError(f"Unknown task: {task}")
+
+
+if __name__ == "__main__":
+    fire.Fire(main)
