@@ -235,6 +235,7 @@ class DroneRacingWrapper(Wrapper):
                 [info["current_gate_id"]],
             ]
         )
+        #print(obs)
         return obs
 
 
@@ -289,6 +290,8 @@ class DroneRacingObservationWrapper:
         """
         obs, info = self.env.reset(*args, **kwargs)
         obs = DroneRacingWrapper.observation_transform(obs, info)
+        #lenght of obs
+        print(len(obs))
         return obs, info
 
     def step(
