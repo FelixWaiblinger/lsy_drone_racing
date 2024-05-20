@@ -32,8 +32,7 @@ from stable_baselines3.ppo import PPO
 
 from lsy_drone_racing.command import Command
 from lsy_drone_racing.controller import BaseController
-from lsy_drone_racing.wrapper import DroneRacingWrapper
-
+from lsy_drone_racing.wrapper import DroneRacingWrapper,DroneRacingRewardWrapper
 
 class Controller(BaseController):
     """Template controller class."""
@@ -79,7 +78,7 @@ class Controller(BaseController):
         #########################
         # REPLACE THIS (START) ##
         #########################
-
+        
         env = DroneRacingWrapper(initial_info["env"], terminate_on_lap=True)
         self.model = PPO.load("./test2", env)
 
@@ -125,7 +124,7 @@ class Controller(BaseController):
         # print(f"Step: {step}, Target: {target_pos}")
         # print(f"Current position: {obs[0], obs[2], obs[4]}")
         target_vel = np.zeros(3)
-        target_acc = np.ones(3) * 0.5
+        target_acc = np.zeros(3)
         target_rpy_rates = np.zeros(3)
         command_type = Command.FULLSTATE
         args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates, ep_time]
