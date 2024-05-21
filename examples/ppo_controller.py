@@ -32,7 +32,6 @@ from stable_baselines3.ppo import PPO
 
 from lsy_drone_racing.command import Command
 from lsy_drone_racing.controller import BaseController
-from lsy_drone_racing.wrapper import DroneRacingWrapper,DroneRacingRewardWrapper
 
 class Controller(BaseController):
     """Template controller class."""
@@ -75,16 +74,8 @@ class Controller(BaseController):
         self.reset()
         self.episode_reset()
 
-        #########################
-        # REPLACE THIS (START) ##
-        #########################
-        
-        env = DroneRacingWrapper(initial_info["env"], terminate_on_lap=True)
-        self.model = PPO.load("./test2", env)
-
-        #########################
-        # REPLACE THIS (END) ####
-        #########################
+        #NOTE: no need to pass the enviroment to PPO.load
+        self.model = PPO.load("./test1")
 
     def compute_control(
         self,
