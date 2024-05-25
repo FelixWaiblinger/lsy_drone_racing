@@ -11,21 +11,22 @@ import fire
 import yaml
 from munch import munchify
 from safe_control_gym.utils.registration import make
-from stable_baselines3 import PPO,DDPG
+from stable_baselines3 import PPO
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import DroneRacingWrapper, DroneRacingRewardWrapper
-import torch
+from lsy_drone_racing.wrapper import DroneRacingWrapper, RewardWrapper
+# import torch
+
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "ppo_test"
 SAVE_PATH = "./test1"
-TRAIN_STEPS = 50000
+TRAIN_STEPS = 10000
 
 #policy_kwargs = dict(activation_fn=torch.nn.ReLU,net_arch=dict(pi=[32, 32], vf=[32, 32]))       
-policy_kwargs = dict(activation_fn=torch.nn.ReLU,net_arch=dict(pi=[128, 256], vf=[256]))       
+# policy_kwargs = dict(activation_fn=torch.nn.ReLU,net_arch=dict(pi=[128, 256], vf=[256]))       
 
 def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
     """Create the drone racing environment."""
@@ -44,13 +45,12 @@ def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
     env_factory = partial(make, "quadrotor", **config.quadrotor_config)
     firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
     drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
-    drone_racing_env = DroneRacingRewardWrapper(drone_racing_env)
-    #drone_racing_env = DroneRacingActionWrapper(drone_racing_env)
+    drone_racing_env = RewardWrapper(drone_racing_env)
     return drone_racing_env
 
 def train(
     config: str = "config/getting_started.yaml",
-    gui: bool = True,
+    gui: bool = False,
     resume: bool = False
 ):
     """Create the environment, check its compatibility with sb3, and run a PPO agent."""
@@ -65,7 +65,7 @@ def train(
     else:
         print("Training new agent...")
         #smaller lr or batch size, toy problem mit nur hovern (reward anpassen)
-        agent = PPO ("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)
+        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True,tb_log_name=LOG_NAME)
     agent.save(SAVE_PATH)
 
