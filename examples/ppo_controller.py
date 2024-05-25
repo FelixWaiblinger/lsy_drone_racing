@@ -107,9 +107,11 @@ class Controller(BaseController):
         #########################
         # REPLACE THIS (START) ##
         #########################
-
         # Handcrafted solution for getting_stated scenario.
-        action, _ = self.model.predict(obs[:9], deterministic=True)
+        action, _ = self.model.predict(obs, deterministic=True)
+        #ensure that action is float
+        action = action.tolist()
+        print(action)
         target_pos = action[:3]
         target_yaw = action[3]
         # print(f"Step: {step}, Target: {target_pos}")

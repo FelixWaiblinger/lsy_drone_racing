@@ -235,7 +235,6 @@ class DroneRacingWrapper(Wrapper):
                 [info["current_gate_id"]],
             ]
         )
-        #print(obs)
         return obs
 
 
@@ -290,8 +289,6 @@ class DroneRacingObservationWrapper:
         """
         obs, info = self.env.reset(*args, **kwargs)
         obs = DroneRacingWrapper.observation_transform(obs, info)
-        #lenght of obs
-        print(len(obs))
         return obs, info
 
     def step(
@@ -351,7 +348,18 @@ class RewardWrapper(Wrapper):
             The next observation, the reward, the terminated and truncated flags, and the info dict.
         """
         obs, reward, terminated, truncated, info = self.env.step(action)
-        reward = self._compute_reward(obs, reward, terminated, truncated, info)
+
+        # TODO: needs fine-tuning
+        #reward lap 20, reward collision -10
+        reward_lap = 10 if terminated and info["task_completed"] else 0
+        reward_collision = -5 if terminated and info["collision"][1] else 0
+        #reward_time = -0.1 if not terminated and not truncated else 0
+        print(info["current_gate_id"])
+        reward_distance = -0.1 * np.linalg.norm(obs[:3] - info["gates_pose"][info["current_gate_id"]][:3]) if info["current_gate_id"] != -1 else 0
+        #print(reward_distance)
+        #reward = -np.linalg.norm(drone_pos-np.array([1.0,1.0,1.0]),2)
+
+        reward = reward_lap + reward_collision
         return obs, reward, terminated, truncated, info
 
     def _compute_reward(
