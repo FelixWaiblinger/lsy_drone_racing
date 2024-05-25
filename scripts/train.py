@@ -10,18 +10,19 @@ import fire
 import yaml
 from munch import munchify
 from safe_control_gym.utils.registration import make
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, DDPG
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import DroneRacingWrapper, DroneRacingRewardWrapper
+from lsy_drone_racing.wrapper import \
+    DroneRacingWrapper, DroneRacingRewardWrapper, DroneRacingActionWrapper
 
 
 logger = logging.getLogger(__name__)
 
-SAVE_PATH = "./test5"
-TASK = "eval" # one of [train, retrain, ]
+SAVE_PATH = "./test"
+TASK = "train" # one of [train, retrain, eval]
 TRAIN_STEPS = 100000
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "ppo_test"
@@ -42,9 +43,11 @@ def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
     assert pyb_freq % FIRMWARE_FREQ == 0, "pyb_freq must be a multiple of firmware freq"
     config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
     env_factory = partial(make, "quadrotor", **config.quadrotor_config)
-    firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
-    drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
-    return DroneRacingRewardWrapper(drone_racing_env)
+    env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
+    env = DroneRacingWrapper(env, terminate_on_lap=True)
+    env = DroneRacingRewardWrapper(env)
+    # env = DroneRacingActionWrapper(env)
+    return env
 
 
 def train(

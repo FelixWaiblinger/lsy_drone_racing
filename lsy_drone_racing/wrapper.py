@@ -458,18 +458,15 @@ class DroneRacingRewardWrapper(Wrapper):
         drone_position = obs[:3]
         distance = gate_position - drone_position
 
-        # print(action)
-        # print(gate_position)
-
         # reward passing the next gate
         if gate_id > self.current_gate: # drone passed a gate
-            reward_gate = 10
+            reward_gate = 50
             self.current_gate = gate_id
         else:
             reward_gate = 0
 
         # reward finishing an entire lap
-        reward_lap = 100 if terminated and info["task_completed"] else 0
+        reward_lap = 300 if terminated and info["task_completed"] else 0
 
         # punish a collision
         reward_collision = -300 if terminated and info["collision"][1] else 0
@@ -481,10 +478,81 @@ class DroneRacingRewardWrapper(Wrapper):
         reward_time = -0.01 if not terminated and not truncated else 0
 
         # reward moving towards the next target
-        reward_distance = 3 - np.linalg.norm(distance, ord=2)
+        reward_distance = -np.linalg.norm(distance, ord=2)
 
         # combine rewards
         reward = reward_lap + reward_gate + reward_collision + \
                  reward_bounds + reward_time + reward_distance
+
+        return obs, reward, terminated, truncated, info
+
+
+class DroneRacingActionWrapper(Wrapper):
+    """Drone racing wrapper wrapper to customize the action selected.
+
+    This wrapper overrides the action generated in the controller by converting
+    absolute coordinates to smaller steps in close to the drones current
+    position.
+    """
+
+    def __init__(self, env: DroneRacingWrapper):
+        """Initialize the wrapper.
+
+        Args:
+            env: The drone racing wrapper.
+        """
+
+        super().__init__(env)
+        self.previous_position = None
+        self.step_length = 0.01 # NOTE: fine-tune here
+
+    def reset(self, *args: Any, **kwargs: dict[str, Any]) -> tuple[np.ndarray, dict]:
+        """Reset the environment.
+
+        Args:
+            args: Positional arguments to pass to the firmware wrapper.
+            kwargs: Keyword arguments to pass to the firmware wrapper.
+
+        Returns:
+            The transformed observation and the info dict.
+        """
+        obs, info = self.env.reset(*args, **kwargs)
+        self.previous_position = obs[:3] # reset drone position
+        return obs, info
+
+    def step(self,
+        action: np.ndarray
+    ) -> tuple[np.ndarray, float, bool, bool, dict]:
+        """Take a step in the environment.
+
+        Args:
+            action: The action to take in the environment.
+            See action space for details.
+
+        Returns:
+            The next observation, the customized reward, the terminated and
+            truncated flags, and the info dict.
+        """
+        # print(self.previous_position)
+        # print("---------------------")
+        # print(action[:3])
+        # print(" ->")
+
+        # direction = target - current (in absolute coords)
+        pos_in_action_space = self.previous_position / 5 # observation limits
+        direction = action[:3] - pos_in_action_space
+        normalized = direction / np.sum(direction, axis=0)
+
+        # new target = current + direction * length
+        action[:3] = np.clip(
+            pos_in_action_space + normalized * self.step_length,
+            a_min=-1, a_max=1
+        )
+
+        # print(action[:3] * 5)
+        # print("---------------------")
+
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        self.previous_position = obs[:3]
 
         return obs, reward, terminated, truncated, info
