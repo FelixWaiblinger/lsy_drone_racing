@@ -10,16 +10,16 @@ import fire
 import yaml
 from munch import munchify
 from safe_control_gym.utils.registration import make
-from stable_baselines3 import PPO, DDPG
+from stable_baselines3 import PPO
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 from lsy_drone_racing.constants import FIRMWARE_FREQ
 from lsy_drone_racing.wrapper import \
-    DroneRacingWrapper, DroneRacingRewardWrapper, DroneRacingActionWrapper
+    DroneRacingWrapper, DroneRacingRewardWrapper, RewardWrapper
 
-
-logger = logging.getLogger(__name__)
 
 SAVE_PATH = "./test"
 TASK = "train" # one of [train, retrain, eval]
@@ -42,11 +42,24 @@ def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
     pyb_freq = config.quadrotor_config["pyb_freq"]
     assert pyb_freq % FIRMWARE_FREQ == 0, "pyb_freq must be a multiple of firmware freq"
     config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
-    env_factory = partial(make, "quadrotor", **config.quadrotor_config)
-    env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
-    env = DroneRacingWrapper(env, terminate_on_lap=True)
-    env = DroneRacingRewardWrapper(env)
-    # env = DroneRacingActionWrapper(env)
+
+    def env_factory():
+        env = partial(make, "quadrotor", **config.quadrotor_config)
+        env = make("firmware", env, FIRMWARE_FREQ, CTRL_FREQ)
+        env = DroneRacingWrapper(env, terminate_on_lap=True)
+        env = DroneRacingRewardWrapper(env)
+        # env = RewardWrapper(env)
+        # check_env(env)
+        return env
+
+    # env = make_vec_env(
+    #     env_factory,
+    #     n_envs=8,
+    #     vec_env_cls=DummyVecEnv, #SubprocVecEnv,
+    #     # vec_env_kwargs={"start_method": "fork"}
+    # )
+    env = env_factory()
+
     return env
 
 
@@ -59,14 +72,14 @@ def train(
     logging.basicConfig(level=logging.INFO)
     config_path = Path(__file__).resolve().parents[1] / config
     env = create_race_env(config_path=config_path, gui=gui)
-    check_env(env)  # Sanity check to ensure the environment conforms to the sb3 API
+    # check_env(env)  # Sanity check to ensure the environment conforms to the sb3 API
 
     if resume:
         print("Continuing...")
         agent = PPO.load(SAVE_PATH, env)
     else:
         print("Training new agent...")
-        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)
+        agent = PPO("MlpPolicy", env, tensorboard_log=LOG_FOLDER)
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True, tb_log_name=LOG_NAME)
     agent.save(SAVE_PATH)
 
