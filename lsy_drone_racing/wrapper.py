@@ -405,6 +405,70 @@ class RewardWrapper(Wrapper):
         return gate_reward + crash_penality + gate_passed_reward
 
 
+class HoverRewardWrapper(Wrapper):
+    """Wrapper to alter the default reward function from the environment for RL training."""
+
+    def __init__(self, env: Env):
+        """Initialize the wrapper.
+
+        Args:
+            env: The firmware wrapper.
+        """
+        super().__init__(env)
+
+    def reset(self, *args: Any, **kwargs: dict[str, Any]) -> np.ndarray:
+        """Reset the environment.
+
+        Args:
+            args: Positional arguments to pass to the firmware wrapper.
+            kwargs: Keyword arguments to pass to the firmware wrapper.
+
+        Returns:
+            The initial observation of the next episode.
+        """
+        obs, info = self.env.reset(*args, **kwargs)
+        # Delete CasADi models to enable multiprocessed environments. TODO: Put this in a separate
+        # wrapper.
+        del info["symbolic_model"]
+        del info["symbolic_constraints"]
+        return obs, info
+
+    def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict]:
+        """Take a step in the environment.
+
+        Args:
+            action: The action to take in the environment. See action space for details.
+
+        Returns:
+            The next observation, the reward, the terminated and truncated flags, and the info dict.
+        """
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        reward = self._compute_reward(obs, reward, terminated, truncated, info)
+        return obs, reward, terminated, truncated, info
+
+    def _compute_reward(
+        self, obs: np.ndarray, reward: float, terminated: bool, truncated: bool, info: dict
+    ) -> float:
+        """Compute the reward for the current step.
+
+        Args:
+            obs: The current observation.
+            reward: The reward from the environment.
+            terminated: True if the episode is terminated.
+            truncated: True if the episode is truncated.
+            info: Additional information from the environment.
+
+        Returns:
+            The computed reward.
+        """
+        distance = np.linalg.norm(obs[:3] - np.ones(3), ord=2)
+        distance_penalty = -distance if distance > 0.15 else 0
+        time_reward = 1 if distance < 0.15 else 0 # per step
+        collision = terminated and not info["task_completed"] and info["collision"][0]
+        crash_penalty = -10 if collision else 0
+        return distance_penalty + time_reward + crash_penalty
+
+
 class DroneRacingRewardWrapper(Wrapper):
     """Drone racing wrapper wrapper to customize the reward function.
 
