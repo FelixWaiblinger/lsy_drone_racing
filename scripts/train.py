@@ -22,11 +22,11 @@ from lsy_drone_racing.wrapper import \
     DroneRacingWrapper, RewardWrapper, HoverRewardWrapper
 
 
-SAVE_PATH = "./test"
-TASK = "train" # one of [train, retrain, eval]
-TRAIN_STEPS = 300000
+SAVE_PATH = "./gate"
+TASK = "train" # one of [train, resume, eval]
+TRAIN_STEPS = 200000
 LOG_FOLDER = "./ppo_drones_tensorboard/"
-LOG_NAME = "ppo_test"
+LOG_NAME = "ppo_gate"
 
 
 def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
@@ -47,7 +47,7 @@ def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
         config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
         env = partial(make, "quadrotor", **config.quadrotor_config)
         env = make("firmware", env, FIRMWARE_FREQ, CTRL_FREQ)
-        
+
         return env
 
     env = make_vec_env(
@@ -76,7 +76,7 @@ def train(
         agent = PPO.load(SAVE_PATH, env)
     else:
         print("Training new agent...")
-        agent = PPO("MlpPolicy", env, tensorboard_log=LOG_FOLDER, device="cuda")
+        agent = PPO("MlpPolicy", env, tensorboard_log=LOG_FOLDER)
                     # n_steps=1024, batch_size=128, learning_rate=linear_schedule(0.001))
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True, tb_log_name=LOG_NAME)
     agent.save(SAVE_PATH)
@@ -98,31 +98,30 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
 if __name__ == "__main__":
     if TASK == "train":
         fire.Fire(train)
-    elif TASK == "retrain":
+    elif TASK == "resume":
         fire.Fire(train, command=["--resume", "True"])
     else:
         path_to_config = Path(__file__).resolve().parents[1] / "config/getting_started.yaml"
         test_env = create_race_env(config_path=path_to_config, gui=True)
+        model = PPO.load(SAVE_PATH, test_env)
         obs = test_env.reset()
-        reward, episodes = 0, 0
+        reward, episodes = np.zeros(2), np.zeros(2)
         for _ in range(1000):
-            action = np.array([1, 1, 1, 0]) - obs[0, [0, 1, 2, 5]]
-            action[:3] *= 0.2 # ensure xyz is in [-1, 1]
-            action = np.array([action], dtype=np.float32)
+            # action = np.array([1, 1, 1, 0]) - obs[0, [0, 1, 2, 5]]
+            # action[:3] *= 0.2 # ensure xyz is in [-1, 1]
+            # action = np.array([action], dtype=np.float32)
+            action = model.predict(obs, deterministic=True)[0]
             obs, rew, don, inf = test_env.step(action)
-            print(f"{rew = }")
+            print(f"{obs[0, :3]}")
             reward += rew
-            if don:
-                # test_env.reset()
-                episodes += 1
+            episodes[don] += 1
         print(f"rew/episode: {reward / episodes}")
 
-        # model = PPO.load(SAVE_PATH, test_env)
-        # mean_reward, std_reward = evaluate_policy(
-        #     model,
-        #     model.get_env(),
-        #     n_eval_episodes=10,
-        #     deterministic=True
-        # )
-        # print(f"{mean_reward = }")
-        # print(f"{std_reward = }")
+        mean_reward, std_reward = evaluate_policy(
+            model,
+            model.get_env(),
+            n_eval_episodes=10,
+            deterministic=True
+        )
+        print(f"{mean_reward = }")
+        print(f"{std_reward = }")

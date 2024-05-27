@@ -462,10 +462,12 @@ class HoverRewardWrapper(Wrapper):
             The computed reward.
         """
         distance = np.linalg.norm(obs[:3] - np.ones(3), ord=2)
-        distance_penalty = -distance if distance > 0.15 else 0
-        time_reward = 1 if distance < 0.15 else 0 # per step
-        collision = terminated and not info["task_completed"] and info["collision"][0]
-        crash_penalty = -10 if collision else 0
+        distance_penalty = np.exp(-distance)
+        time_reward = 0
+        # distance_penalty = -0.5 * distance if distance > 0.15 else 0
+        # time_reward = 1 if distance < 0.15 else 0 # per step
+        collision = terminated #and not info["task_completed"] and info["collision"][0]
+        crash_penalty = -1 if collision else 0
         return distance_penalty + time_reward + crash_penalty
 
 
