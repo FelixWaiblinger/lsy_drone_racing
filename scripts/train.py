@@ -16,37 +16,54 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import DroneRacingWrapper, RewardWrapper
+from lsy_drone_racing.wrapper import DroneRacingWrapper, GateRewardWrapper, RewardWrapper
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 # import torch
 
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "ppo_test"
 SAVE_PATH = "./test1"
-TRAIN_STEPS = 10000
+TRAIN_STEPS = 100000
 
-#policy_kwargs = dict(activation_fn=torch.nn.ReLU,net_arch=dict(pi=[32, 32], vf=[32, 32]))       
-# policy_kwargs = dict(activation_fn=torch.nn.ReLU,net_arch=dict(pi=[128, 256], vf=[256]))       
 
-def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
-    """Create the drone racing environment."""
-    # Load configuration and check if firmare should be used.
-    assert config_path.exists(), f"Configuration file not found: {config_path}"
-    with open(config_path, "r", encoding='utf-8') as file:
-        config = munchify(yaml.safe_load(file))
-    # Overwrite config options
-    config.quadrotor_config.gui = gui
-    CTRL_FREQ = config.quadrotor_config["ctrl_freq"]
-    # Create environment
-    assert config.use_firmware, "Firmware must be used for the competition."
-    pyb_freq = config.quadrotor_config["pyb_freq"]
-    assert pyb_freq % FIRMWARE_FREQ == 0, "pyb_freq must be a multiple of firmware freq"
-    config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
-    env_factory = partial(make, "quadrotor", **config.quadrotor_config)
-    firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
-    drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
-    drone_racing_env = RewardWrapper(drone_racing_env)
-    return drone_racing_env
+def create_race_env(config_path: Path, gui: bool = False) :
+
+    def env_factory():
+
+        """Create the drone racing environment."""
+        
+        # Load configuration and check if firmare should be used.
+        assert config_path.exists(), f"Configuration file not found: {config_path}"
+        with open(config_path, "r", encoding='utf-8') as file:
+            config = munchify(yaml.safe_load(file))
+        # Overwrite config options
+        config.quadrotor_config.gui = gui
+        CTRL_FREQ = config.quadrotor_config["ctrl_freq"]
+        # Create environment
+        assert config.use_firmware, "Firmware must be used for the competition."
+        pyb_freq = config.quadrotor_config["pyb_freq"]
+        assert pyb_freq % FIRMWARE_FREQ == 0, "pyb_freq must be a multiple of firmware freq"
+        config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
+        env_factory = partial(make, "quadrotor", **config.quadrotor_config)
+        firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
+        drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
+        drone_racing_env = GateRewardWrapper(drone_racing_env)
+        return drone_racing_env
+
+    env = make_vec_env(
+            lambda: env_factory(),
+            n_envs=2,
+            vec_env_cls=DummyVecEnv
+            # vec_env_cls=SubprocVecEnv,
+            # vec_env_kwargs={"start_method": "fork"}
+        )
+
+    return env
+
+
+
 
 def train(
     config: str = "config/getting_started.yaml",
@@ -79,14 +96,13 @@ def evaluate():
     # NOTE: from Martin Schuck
     
     '''
-    
     for i in range(10):
         total_reward = 0
         obs, info = test_env.reset()
         done = False
         rew = []
         for j in range(1000):
-            action = np.array([0.2,0.2,1.0,0.0], dtype=np.float32)
+            action = np.array([1,1,1,0.0], dtype=np.float32)
             obs, reward, terminated, truncated, info = test_env.step(action)
             rew.append(reward)
             done = terminated or truncated

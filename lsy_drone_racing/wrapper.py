@@ -196,6 +196,20 @@ class DroneRacingWrapper(Wrapper):
         action[3] = map2pi(action[3])  # Ensure yaw is in [-pi, pi]
         return action
 
+
+    # transform action to absolute values
+    def _action_transform_abs(self, action: np.ndarray) -> np.ndarray:
+        """Transform the action to the format expected by the firmware env.
+
+        Args:
+            action: The action to transform.
+
+        Returns:
+            The transformed action.
+        """
+        action = action * self.action_scale
+        action[3] = map2pi(action[3])
+        return action
     def render(self):
         """Render the environment.
 
@@ -356,14 +370,13 @@ class RewardWrapper(Wrapper):
         # #reward_time = -0.1 if not terminated and not truncated else 0
         # print(info["current_gate_id"])
         # reward_distance = -0.1 * np.linalg.norm(obs[:3] - info["gates_pose"][info["current_gate_id"]][:3]) if info["current_gate_id"] != -1 else 0
-        # print(obs[:3])
-        crash_penality = -10 if terminated and not info["task_completed"] else 0
-        distance = -np.linalg.norm(obs[:3] - np.ones(3), 2)
-        time = 0.1
-        reward = distance + crash_penality + time
-
-        # reward = self._compute_reward(obs, reward, terminated, truncated, info)
-        # reward = reward_lap + reward_collision
+        time_reward = 0.1
+        collision_penality = -1 if terminated and not info["task_completed"] else 0
+        distance_z = (obs[2] - 1)**2
+        distance_x = (obs[0] - 1)**2
+        distance_y = (obs[1] - 1)**2              
+        distance = -distance_x - distance_y -distance_z
+        reward = distance + time_reward + collision_penality
         return obs, reward, terminated, truncated, info
 
     def _compute_reward(
@@ -386,3 +399,71 @@ class RewardWrapper(Wrapper):
         gate_passed_reward = 0 if gate_id == self._last_gate else 0.1
         crash_penality = -1 if terminated and not info["task_completed"] else 0
         return gate_reward + crash_penality + gate_passed_reward
+
+class GateRewardWrapper(Wrapper):
+    """Wrapper to alter the default reward function from the environment for RL training."""
+
+    def __init__(self, env: Env):
+        """Initialize the wrapper.
+
+        Args:
+            env: The firmware wrapper.
+        """
+        super().__init__(env)
+        self._last_pos = None
+        self._last_gate = None
+
+    def reset(self, *args: Any, **kwargs: dict[str, Any]) -> np.ndarray:
+        """Reset the environment.
+
+        Args:
+            args: Positional arguments to pass to the firmware wrapper.
+            kwargs: Keyword arguments to pass to the firmware wrapper.
+
+        Returns:
+            The initial observation of the next episode.
+        """
+        obs, info = self.env.reset(*args, **kwargs)
+        self._last_pos = obs[:3]
+        self._last_gate = info["current_gate_id"]
+        del info["symbolic_model"]
+        del info["symbolic_constraints"]
+        return obs, info
+
+    def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict]:
+        """Take a step in the environment.
+
+        Args:
+            action: The action to take in the environment. See action space for details.
+
+        Returns:
+            The next observation, the reward, the terminated and truncated flags, and the info dict.
+        """
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        reward = self._compute_reward(obs, reward, terminated, truncated, info)
+        return obs, reward, terminated, truncated, info
+
+    def _compute_reward(
+        self, obs: np.ndarray, reward: float, terminated: bool, truncated: bool, info: dict
+    ) -> float:
+        """Compute the reward for the current step.
+
+        Args:
+            obs: The current observation.
+            reward: The reward from the environment.
+            terminated: True if the episode is terminated.
+            truncated: True if the episode is truncated.
+            info: Additional information from the environment.
+
+        Returns:
+            The computed reward.
+        """
+        gate_id = info["current_gate_id"]
+        gate_one = np.array([0.45,-1,0.5])
+        #gate_reward_actual = np.exp(-np.linalg.norm(info["gates_pose"][gate_id, :3] - obs[:3],ord=1))
+        #gate_reward_past = np.exp(-np.linalg.norm(info["gates_pose"][gate_id, :3] - self._last_pos))
+        #gate_passed_reward = gate_reward_actual if gate_id == self._last_gate else 0
+        gate_one_reward = np.exp(-np.linalg.norm(gate_one - obs[:3],ord=2))
+        crash_penality = -1 if terminated and not info["task_completed"] else 0
+        #flyiing_penalty = gate_reward_actual - gate_reward_past
+        return crash_penality + gate_one_reward
