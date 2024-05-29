@@ -31,7 +31,6 @@ TRAIN_STEPS = 100000
 def create_race_env(config_path: Path, gui: bool = False) :
 
     def env_factory():
-
         """Create the drone racing environment."""
         
         # Load configuration and check if firmare should be used.
