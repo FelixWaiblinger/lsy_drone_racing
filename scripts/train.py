@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Callable
 import logging
 from functools import partial
 from pathlib import Path
@@ -13,20 +12,19 @@ import numpy as np
 from munch import munchify
 from safe_control_gym.utils.registration import make
 from stable_baselines3 import PPO, DDPG, SAC
-from stable_baselines3.common.evaluation import evaluate_policy
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+# from stable_baselines3.common.env_util import make_vec_env
+# from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecCheckNan
 
+from lsy_drone_racing.utils import linear_schedule, draw_policy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import \
-    DroneRacingWrapper, RewardWrapper, HoverRewardWrapper
+from lsy_drone_racing.wrapper import DroneRacingWrapper, RewardWrapper #, HoverRewardWrapper
 
 
-SAVE_PATH = "./gate"
-TASK = "train" # one of [train, resume, eval]
-TRAIN_STEPS = 200000
+AGENT_PATH = "./gate_tracking_sac"
+TRAIN_STEPS = 500_000
+CONFIG = "config/level0.yaml"
 LOG_FOLDER = "./ppo_drones_tensorboard/"
-LOG_NAME = "ppo_gate"
+LOG_NAME = "gate_tracking_sac"
 
 
 def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
@@ -50,78 +48,110 @@ def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
 
         return env
 
-    env = make_vec_env(
-        lambda: HoverRewardWrapper(DroneRacingWrapper(env_factory())),
-        n_envs=1,
-        vec_env_cls=DummyVecEnv
-        # vec_env_cls=SubprocVecEnv,
-        # vec_env_kwargs={"start_method": "fork"}
-    )
+    # env = make_vec_env(
+    #     lambda: MultiProcessingWrapper(RewardWrapper(DroneRacingWrapper(env_factory()))),
+    #     n_envs=1,
+    #     vec_env_cls=DummyVecEnv
+    #     # vec_env_cls=SubprocVecEnv,
+    #     # vec_env_kwargs={"start_method": "fork"}
+    # )
+    # env = VecCheckNan(env, raise_exception=True)
+    env = RewardWrapper(DroneRacingWrapper(env_factory()))
+    # env = HoverRewardWrapper(DroneRacingWrapper(env_factory()))
 
     return env
 
 
-def train(
-    config: str = "config/getting_started.yaml",
-    gui: bool = False,
-    resume: bool = False
-):
-    """Create the environment, check its compatibility with sb3, and run a PPO agent."""
+def start_training():
+    """Create the environment create a new agent and train it"""
     logging.basicConfig(level=logging.INFO)
-    config_path = Path(__file__).resolve().parents[1] / config
-    env = create_race_env(config_path=config_path, gui=gui)
+    config_path = Path(__file__).resolve().parents[1] / CONFIG
+    env = create_race_env(config_path=config_path, gui=False)
+    agent = SAC("MlpPolicy", env, tensorboard_log=LOG_FOLDER,
+                # n_steps=64, batch_size=64,
+                learning_rate=linear_schedule(0.001, 0.5))
 
-    if resume:
-        print("Continuing...")
-        agent = PPO.load(SAVE_PATH, env)
-    else:
-        print("Training new agent...")
-        agent = PPO("MlpPolicy", env, tensorboard_log=LOG_FOLDER)
-                    # n_steps=1024, batch_size=128, learning_rate=linear_schedule(0.001))
+    print("Training new agent...")
+    try:
+        agent.learn(
+            total_timesteps=TRAIN_STEPS,
+            progress_bar=True,
+            tb_log_name=LOG_NAME
+        )
+    except Exception as e:
+        print(e)
+    agent.save(AGENT_PATH)
+
+
+def continue_training():
+    """Create the environment, load a pretrained agent and continue training"""
+    logging.basicConfig(level=logging.INFO)
+    config_path = Path(__file__).resolve().parents[1] / CONFIG
+    env = create_race_env(config_path=config_path, gui=False)
+    agent = PPO.load(AGENT_PATH, env)
+
+    print("Continuing...")
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True, tb_log_name=LOG_NAME)
-    agent.save(SAVE_PATH)
+    agent.save(AGENT_PATH)
 
 
-def linear_schedule(initial_value: float) -> Callable[[float], float]:
-    """Linear learning rate schedule (current learning rate depending on
-    remaining progress)
-    """
+def evaluate():
+    """Create the environment, load a pretrained agent and evaluate it"""
+    logging.basicConfig(level=logging.INFO)
+    path_to_config = Path(__file__).resolve().parents[1] / CONFIG
+    env = create_race_env(config_path=path_to_config, gui=True)
+    model = SAC.load(AGENT_PATH, env)
 
-    def func(progress_remaining: float) -> float:
-        """Progress will decrease from 1 (beginning) to 0"""
+    obs, _ = env.reset()
+    # draw_policy(model, obs, size=(3, 3, 2))
+    reward, episodes, state = 0, 1, 0
+    for _ in range(10000):
+        action, _ = model.predict(obs, deterministic=True)
+        # action, state = hardcoded_predict(state, obs)
+        # action[:3] /= 0.1 # ensure xyz is in [-1, 1]
+        obs, rew, ter, tru, inf = env.step(action)
+        # print(f"{obs[:3]}")
+        reward += rew
+        if ter or tru:
+            episodes += 1
+            state = 0
+            obs, _ = env.reset()
 
-        return progress_remaining * initial_value
+    print(f"rew/episode: {reward / episodes}")
 
-    return func
+
+def hardcoded_predict(state, obs):
+    """Test"""
+    first_gate = np.array([0.45, -1.0, 0, 0], dtype=np.float32)
+    some_pos = np.array([0, -2, 0.7, 0], dtype=np.float32)
+    second_gate = np.array([1.0, -1.55, 1, 0], dtype=np.float32)
+
+    if state == 0:
+        action = first_gate - obs[[0, 1, 2, 5]]
+        dist = np.linalg.norm(first_gate[:2] - obs[:2], ord=2)
+        if dist < 0.15:
+            print("state 0 passed")
+            state += 1
+    elif state == 1:
+        action = some_pos - obs[[0, 1, 2, 5]]
+        dist = np.linalg.norm(some_pos[:2] - obs[:2], ord=2)
+        if dist < 0.15:
+            print("state 1 passed")
+            state += 1
+    elif state == 2:
+        action = second_gate - obs[[0, 1, 2, 5]]
+        dist = np.linalg.norm(first_gate[:2] - obs[:2], ord=2)
+        if dist < 0.15:
+            print("Woop woop")
+
+    action /= np.max(action) # normalize
+    return action, state
 
 
 if __name__ == "__main__":
-    if TASK == "train":
-        fire.Fire(train)
-    elif TASK == "resume":
-        fire.Fire(train, command=["--resume", "True"])
-    else:
-        path_to_config = Path(__file__).resolve().parents[1] / "config/getting_started.yaml"
-        test_env = create_race_env(config_path=path_to_config, gui=True)
-        model = PPO.load(SAVE_PATH, test_env)
-        obs = test_env.reset()
-        reward, episodes = np.zeros(2), np.zeros(2)
-        for _ in range(1000):
-            # action = np.array([1, 1, 1, 0]) - obs[0, [0, 1, 2, 5]]
-            # action[:3] *= 0.2 # ensure xyz is in [-1, 1]
-            # action = np.array([action], dtype=np.float32)
-            action = model.predict(obs, deterministic=True)[0]
-            obs, rew, don, inf = test_env.step(action)
-            print(f"{obs[0, :3]}")
-            reward += rew
-            episodes[don] += 1
-        print(f"rew/episode: {reward / episodes}")
 
-        mean_reward, std_reward = evaluate_policy(
-            model,
-            model.get_env(),
-            n_eval_episodes=10,
-            deterministic=True
-        )
-        print(f"{mean_reward = }")
-        print(f"{std_reward = }")
+    # fire.Fire(start_training)
+
+    # fire.Fire(continue_training)
+
+    fire.Fire(evaluate)

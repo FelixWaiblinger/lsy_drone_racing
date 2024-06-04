@@ -6,11 +6,12 @@ import importlib.util
 import logging
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, Type, Callable
 
 import numpy as np
 import pybullet as p
 import yaml
+import matplotlib.pyplot as plt
 from munch import munchify
 
 from lsy_drone_racing.controller import BaseController
@@ -133,3 +134,42 @@ def draw_trajectory(
         lineColorRGB=[1, 0, 0],
         physicsClientId=initial_info["pyb_client"],
     )
+
+
+def linear_schedule(initial_value: float, slope: float=1) -> Callable[[float], float]:
+    """Linear learning rate schedule (current learning rate depending on
+    remaining progress)
+    """
+
+    assert 0 < slope < 1, f"Invalid slope {slope} in schedule!"
+
+    def func(progress_remaining: float) -> float:
+        """Progress will decrease from 1 (beginning) to 0"""
+
+        return initial_value * (1 - slope + slope * progress_remaining )
+
+    return func
+
+
+def draw_policy(agent, observation, size: tuple, resolution: int=10):
+    """Draw a vector field of the actions an agent would take given any
+    position in the world
+    """
+
+    xs, ys, zs, us, vs, ws = [], [], [], [], [], []
+    offset = 0.5 * (np.array(size) / resolution)
+    for x in np.linspace(-size[0] + offset[0], size[0] - offset[0], resolution):
+        for y in np.linspace(-size[1] + offset[1], size[1] - offset[1], resolution):
+            for z in np.linspace(-size[2] + offset[2], size[2] - offset[2], resolution):
+                observation[:3] = np.array([x, y, z], dtype=np.float32)
+                action, _ = agent.predict(observation, deterministic=True)
+                # action *= 0.5 # shorten for visibility
+                xs.append(x)
+                ys.append(y)
+                zs.append(z)
+                us.append(x + action[0])
+                vs.append(y + action[1])
+                ws.append(x + action[2])
+
+    fig = plt.quiver(xs, ys, zs, us, vs, ws, length=0.1, normalize=True)
+    plt.savefig(fig, "./figure")

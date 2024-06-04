@@ -8,6 +8,15 @@ from lsy_drone_racing.utils.utils import (
     draw_trajectory,
     load_config,
     load_controller,
+    linear_schedule,
+    draw_policy,
 )
 
-__all__ = ["load_config", "load_controller", "check_gate_pass", "draw_trajectory"]
+__all__ = [
+    "load_config",
+    "load_controller",
+    "check_gate_pass",
+    "draw_trajectory",
+    "linear_schedule",
+    "draw_policy",
+]

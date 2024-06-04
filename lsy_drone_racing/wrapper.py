@@ -68,6 +68,7 @@ class DroneRacingWrapper(Wrapper):
         # All values are scaled to [-1, 1]. Transformed back, x, y, z values of 1 correspond to 5m.
         # The yaw value of 1 corresponds to pi radians.
         self.action_scale = np.array([1, 1, 1, np.pi])
+        # self.action_scale = np.array([0.1, 0.1, 0.1, np.pi])
         self.action_space = Box(-1, 1, shape=(4,), dtype=np.float32)
 
         # Observation space:
@@ -136,6 +137,8 @@ class DroneRacingWrapper(Wrapper):
         self._sim_time = 0.0
         self._f_rotors[:] = 0.0
         obs, info = self.env.reset()
+        info.update({"time_step": self._sim_time})
+
         # Store obstacle height for observation expansion during env steps.
         obs = self.observation_transform(obs, info).astype(np.float32)
         self._drone_pose = obs[[0, 1, 2, 5]]
@@ -184,6 +187,8 @@ class DroneRacingWrapper(Wrapper):
         if obs not in self.observation_space:
             terminated = True
         self._reset_required = terminated or truncated
+        info.update({"time_step": self._sim_time})
+
         return obs, reward, terminated, truncated, info
 
     def _action_transform(self, action: np.ndarray) -> np.ndarray:
@@ -354,7 +359,10 @@ class RewardWrapper(Wrapper):
             env: The firmware wrapper.
         """
         super().__init__(env)
-        self._last_gate = None
+        self.current_gate = None
+        self.current_target = None
+        self.previous_pos = None
+        # self.time_gate_passed = 0
 
     def reset(self, *args: Any, **kwargs: dict[str, Any]) -> np.ndarray:
         """Reset the environment.
@@ -367,7 +375,10 @@ class RewardWrapper(Wrapper):
             The initial observation of the next episode.
         """
         obs, info = self.env.reset(*args, **kwargs)
-        self._last_gate = info["current_gate_id"]
+        self.current_gate = info["current_gate_id"]
+        self.current_target = info["gates_pose"][self.current_gate, :3]
+        self.previous_pos = obs[:3]
+        # self.time_gate_passed = 0
         return obs, info
 
     def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict]:
@@ -398,11 +409,41 @@ class RewardWrapper(Wrapper):
         Returns:
             The computed reward.
         """
-        gate_id = info["current_gate_id"]
-        gate_reward = np.exp(-np.linalg.norm(info["gates_pose"][gate_id, :3] - obs[:3]))
-        gate_passed_reward = 0 if gate_id == self._last_gate else 0.1
-        crash_penality = -1 if terminated and not info["task_completed"] else 0
-        return gate_reward + crash_penality + gate_passed_reward
+
+        try:
+            # next gate
+            gate_id = info["current_gate_id"]
+
+            # passing a gate
+            if gate_id > self.current_gate:
+                print(f"gate {self.current_gate} passed") # debugging
+                self.current_gate = gate_id
+                self.current_target = info["gates_pose"][gate_id, :3]
+
+            # NOTE: inspired by "Reaching the limit in autonomous racing: Optimal
+            #       control versus reinforcement learning", Yunlong et.al. 2023
+            # progressing through gates
+            distance_previous = np.linalg.norm(self.current_target - self.previous_pos, ord=2)
+            distance_current = np.linalg.norm(self.current_target - obs[:3], ord=2)
+            bodyrate_penalty = 0.01 * np.linalg.norm(obs[9:12], ord=2)
+            r_gate_progress = distance_previous - distance_current - bodyrate_penalty
+
+            # bonus for each gate passed
+            r_gate_passed = 1 * self.current_gate
+
+            # crashing and lap completion
+            r_crash = -10 if terminated and not info["task_completed"] else 0
+            r_lap = 10 if terminated and info["task_completed"] else 0
+
+            # overall reward
+            reward = r_gate_progress + r_gate_passed + r_crash + r_lap
+
+            self.previous_pos = obs[:3]
+        except Exception as e:
+            print(e)
+            reward = 0
+
+        return reward
 
 
 class HoverRewardWrapper(Wrapper):
@@ -461,14 +502,11 @@ class HoverRewardWrapper(Wrapper):
         Returns:
             The computed reward.
         """
-        distance = np.linalg.norm(obs[:3] - np.ones(3), ord=2)
-        distance_penalty = np.exp(-distance)
-        time_reward = 0
-        # distance_penalty = -0.5 * distance if distance > 0.15 else 0
-        # time_reward = 1 if distance < 0.15 else 0 # per step
-        collision = terminated #and not info["task_completed"] and info["collision"][0]
-        crash_penalty = -1 if collision else 0
-        return distance_penalty + time_reward + crash_penalty
+
+        distance_penalty = np.exp(-np.linalg.norm(obs[:3] - np.ones(3), ord=2))
+        crash_penalty = -1 if terminated and not info["task_completed"] else 0
+
+        return distance_penalty + crash_penalty
 
 
 class DroneRacingRewardWrapper(Wrapper):
@@ -549,76 +587,5 @@ class DroneRacingRewardWrapper(Wrapper):
         # combine rewards
         reward = reward_lap + reward_gate + reward_collision + \
                  reward_bounds + reward_time + reward_distance
-
-        return obs, reward, terminated, truncated, info
-
-
-class DroneRacingActionWrapper(Wrapper):
-    """Drone racing wrapper wrapper to customize the action selected.
-
-    This wrapper overrides the action generated in the controller by converting
-    absolute coordinates to smaller steps in close to the drones current
-    position.
-    """
-
-    def __init__(self, env: DroneRacingWrapper):
-        """Initialize the wrapper.
-
-        Args:
-            env: The drone racing wrapper.
-        """
-
-        super().__init__(env)
-        self.previous_position = None
-        self.step_length = 0.01 # NOTE: fine-tune here
-
-    def reset(self, *args: Any, **kwargs: dict[str, Any]) -> tuple[np.ndarray, dict]:
-        """Reset the environment.
-
-        Args:
-            args: Positional arguments to pass to the firmware wrapper.
-            kwargs: Keyword arguments to pass to the firmware wrapper.
-
-        Returns:
-            The transformed observation and the info dict.
-        """
-        obs, info = self.env.reset(*args, **kwargs)
-        self.previous_position = obs[:3] # reset drone position
-        return obs, info
-
-    def step(self,
-        action: np.ndarray
-    ) -> tuple[np.ndarray, float, bool, bool, dict]:
-        """Take a step in the environment.
-
-        Args:
-            action: The action to take in the environment.
-            See action space for details.
-
-        Returns:
-            The next observation, the customized reward, the terminated and
-            truncated flags, and the info dict.
-        """
-        # print(self.previous_position)
-        # print("---------------------")
-        # print(action[:3])
-        # print(" ->")
-
-        # direction = target - current (in absolute coords)
-        pos_in_action_space = self.previous_position / 5 # observation limits
-        direction = action[:3] - pos_in_action_space
-        normalized = direction / np.sum(direction, axis=0)
-
-        # new target = current + direction * length
-        action[:3] = np.clip(
-            pos_in_action_space + normalized * self.step_length,
-            a_min=-1, a_max=1
-        )
-
-        # print(action[:3] * 5)
-        # print("---------------------")
-
-        obs, reward, terminated, truncated, info = self.env.step(action)
-        self.previous_position = obs[:3]
 
         return obs, reward, terminated, truncated, info
