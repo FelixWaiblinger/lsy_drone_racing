@@ -16,24 +16,23 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import DroneRacingWrapper, GateRewardWrapper, RewardWrapper
+from lsy_drone_racing.wrapper import DroneRacingWrapper, GateRewardWrapper, HoverRewardWrapper, RewardWrapper
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 # import torch
 
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
-LOG_NAME = "ppo_test"
-SAVE_PATH = "./test1"
-TRAIN_STEPS = 100000
-
+LOG_NAME = "ppo_gates"
+SAVE_PATH = "./gates_crashed"
+TRAIN_STEPS = 500000
 
 def create_race_env(config_path: Path, gui: bool = False) :
 
     def env_factory():
-        """Create the drone racing environment."""
+    #    """Create the drone racing environment."""
         
-        # Load configuration and check if firmare should be used.
+    # Load configuration and check if firmare should be used.
         assert config_path.exists(), f"Configuration file not found: {config_path}"
         with open(config_path, "r", encoding='utf-8') as file:
             config = munchify(yaml.safe_load(file))
@@ -50,13 +49,10 @@ def create_race_env(config_path: Path, gui: bool = False) :
         drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
         drone_racing_env = GateRewardWrapper(drone_racing_env)
         return drone_racing_env
-
     env = make_vec_env(
-            lambda: env_factory(),
-            n_envs=2,
-            vec_env_cls=DummyVecEnv
-            # vec_env_cls=SubprocVecEnv,
-            # vec_env_kwargs={"start_method": "fork"}
+        lambda: env_factory(),
+        n_envs=2,
+        vec_env_cls=SubprocVecEnv
         )
 
     return env
@@ -73,7 +69,6 @@ def train(
     logging.basicConfig(level=logging.INFO)
     config_path = Path(__file__).resolve().parents[1] / config
     env = create_race_env(config_path=config_path, gui=gui)
-    check_env(env)  # Sanity check to ensure the environment conforms to the sb3 API
 
     if resume:
         print("Continuing...")
@@ -101,14 +96,16 @@ def evaluate():
         done = False
         rew = []
         for j in range(1000):
-            action = np.array([1,1,1,0.0], dtype=np.float32)
+            action = np.array([1,-0.5,1,0.0], dtype=np.float32)
             obs, reward, terminated, truncated, info = test_env.step(action)
             rew.append(reward)
             done = terminated or truncated
             if done:
                 break
         print(sum(rew) / len(rew))
+
     '''
+
     mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=10, deterministic=True)
     print(f"{mean_reward = }")
     print(f"{std_reward = }")
