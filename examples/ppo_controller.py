@@ -75,7 +75,7 @@ class Controller(BaseController):
         self.episode_reset()
 
         #NOTE: no need to pass the enviroment to PPO.load
-        self.model = PPO.load("./test1")
+        self.model = PPO.load("./hover")
 
     def compute_control(
         self,
@@ -110,12 +110,12 @@ class Controller(BaseController):
         # Handcrafted solution for getting_stated scenario.
         action, _ = self.model.predict(obs, deterministic=True)
         #ensure that action is float
+        action = np.array(action, dtype=np.float32)
         action = action.tolist()
-        print(action)
         target_pos = action[:3]
         target_yaw = action[3]
         # print(f"Step: {step}, Target: {target_pos}")
-        # print(f"Current position: {obs[0], obs[2], obs[4]}")
+        print(f"Current position: {obs[0:3]}")
         target_vel = np.zeros(3)
         target_acc = np.zeros(3)
         target_rpy_rates = np.zeros(3)
