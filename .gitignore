@@ -7,3 +7,8 @@ secrets
 **/*.secret
 saves
 ppo_drones_tensorboard/
+gate_one.zip
+gates_crashed.zip
+gates_new.zip
+gates.zip
+hover.zip
