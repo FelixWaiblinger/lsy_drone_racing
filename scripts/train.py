@@ -11,7 +11,7 @@ import fire
 import yaml
 from munch import munchify
 from safe_control_gym.utils.registration import make
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
@@ -24,8 +24,8 @@ from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "ppo_gates"
-SAVE_PATH = "./gates_crashed"
-TRAIN_STEPS = 500000
+SAVE_PATH = "./gates_sac"
+TRAIN_STEPS = 1000000
 
 def create_race_env(config_path: Path, gui: bool = False) :
 
@@ -72,11 +72,11 @@ def train(
 
     if resume:
         print("Continuing...")
-        agent = PPO.load(SAVE_PATH, env)
+        agent = SAC.load(SAVE_PATH, env)
     else:
         print("Training new agent...")
         #smaller lr or batch size, toy problem mit nur hovern (reward anpassen)
-        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)
+        agent = SAC("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True,tb_log_name=LOG_NAME)
     agent.save(SAVE_PATH)
 
@@ -85,7 +85,7 @@ def evaluate():
     """Evaluate the trained model."""
     path_to_config = Path(__file__).resolve().parents[1] / "config/getting_started.yaml"
     test_env = create_race_env(config_path=path_to_config, gui=True)
-    model = PPO.load(SAVE_PATH, test_env)
+    model = SAC.load(SAVE_PATH, test_env)
 
     # NOTE: from Martin Schuck
     

@@ -697,18 +697,18 @@ class GateRewardWrapper(Wrapper):
         gate_distance = np.exp(-distance_to_gate)
         #weight very close gates higher
         gate_distance = gate_distance * 10 if distance_to_gate < 0.15 else gate_distance
-        
+        bodyrate_penalty = 0.01 * np.linalg.norm(obs[9:12], ord=2)
+
         #distance_to_gate_previous = np.linalg.norm(info["gates_pose"][gate_id, :3] - self._last_pos, ord=2)
         #gate_previous = np.exp(-distance_to_gate_previous)
         #gate_progress = gate_actual - gate_previous
         
-        # if gate passed
-        #if gate_id > self._last_gate:
-        #    gate_passed = 20  # Increased reward for passing gate
-        #    self._last_gate = gate_id
-        #    print("GATE PASSED", gate_id)
-        #else:
-        #    gate_passed = 0
+        if gate_id > self._last_gate:
+            gate_passed = 20  # Increased reward for passing gate
+            self._last_gate = gate_id
+            print("GATE PASSED", self._last_gate)
+        else:
+            gate_passed = 0
 
         # if crashed with a gate        
         if distance_to_gate < 0.65 and any(info["gates_in_range"]) and terminated:
@@ -725,7 +725,7 @@ class GateRewardWrapper(Wrapper):
             #print("NO CRASH", info["gates_in_range"])
             crash_penalty = 0
 
-        return gate_distance + crash_penalty
+        return gate_distance + crash_penalty- bodyrate_penalty +gate_passed
                 
                 
                      
