@@ -88,7 +88,7 @@ def continue_training():
     logging.basicConfig(level=logging.INFO)
     config_path = Path(__file__).resolve().parents[1] / CONFIG
     env = create_race_env(config_path=config_path, gui=False)
-    agent = PPO.load(AGENT_PATH, env)
+    agent = SAC.load(AGENT_PATH, env)
 
     print("Continuing...")
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True, tb_log_name=LOG_NAME)
@@ -152,6 +152,11 @@ if __name__ == "__main__":
 
     # fire.Fire(start_training)
 
-    # fire.Fire(continue_training)
+    # for i in range(5):
+    #     try:
+    #         fire.Fire(continue_training)
+    #         print(i)
+    #     except Exception as e:
+    #         continue
 
     fire.Fire(evaluate)
