@@ -11,17 +11,17 @@ import yaml
 import numpy as np
 from munch import munchify
 from safe_control_gym.utils.registration import make
-from stable_baselines3 import PPO, DDPG, SAC
+from stable_baselines3 import PPO, SAC
 # from stable_baselines3.common.env_util import make_vec_env
 # from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecCheckNan
 
-from lsy_drone_racing.utils import linear_schedule, draw_policy
+from lsy_drone_racing.utils import linear_schedule #, draw_policy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
 from lsy_drone_racing.wrapper import DroneRacingWrapper, RewardWrapper #, HoverRewardWrapper
 
 
-AGENT_PATH = "./gate_tracking_sac"
-TRAIN_STEPS = 500_000
+AGENT_PATH = "./agents/gate_tracking_sac"
+TRAIN_STEPS = 1_000_000
 CONFIG = "config/level0.yaml"
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "gate_tracking_sac"
@@ -68,18 +68,14 @@ def start_training():
     config_path = Path(__file__).resolve().parents[1] / CONFIG
     env = create_race_env(config_path=config_path, gui=False)
     agent = SAC("MlpPolicy", env, tensorboard_log=LOG_FOLDER,
-                # n_steps=64, batch_size=64,
                 learning_rate=linear_schedule(0.001, 0.5))
 
     print("Training new agent...")
-    try:
-        agent.learn(
-            total_timesteps=TRAIN_STEPS,
-            progress_bar=True,
-            tb_log_name=LOG_NAME
-        )
-    except Exception as e:
-        print(e)
+    agent.learn(
+        total_timesteps=TRAIN_STEPS,
+        progress_bar=True,
+        tb_log_name=LOG_NAME
+    )
     agent.save(AGENT_PATH)
 
 
@@ -150,7 +146,7 @@ def hardcoded_predict(state, obs):
 
 if __name__ == "__main__":
 
-    # fire.Fire(start_training)
+    fire.Fire(start_training)
 
     # for i in range(5):
     #     try:
@@ -159,4 +155,4 @@ if __name__ == "__main__":
     #     except Exception as e:
     #         continue
 
-    fire.Fire(evaluate)
+    # fire.Fire(evaluate)

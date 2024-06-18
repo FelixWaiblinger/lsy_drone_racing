@@ -24,7 +24,7 @@ from safe_control_gym.utils.utils import sync
 from lsy_drone_racing.command import apply_sim_command
 from lsy_drone_racing.constants import FIRMWARE_FREQ
 from lsy_drone_racing.utils import load_config, load_controller
-from lsy_drone_racing.wrapper import DroneRacingObservationWrapper
+from lsy_drone_racing.wrapper import DroneRacingWrapper
 
 if TYPE_CHECKING:
     from munch import Munch
@@ -68,7 +68,8 @@ def simulate(
     # user sends ctrl signals, not the firmware.
     config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
     env_func = partial(make, "quadrotor", **config.quadrotor_config)
-    env = DroneRacingObservationWrapper(make("firmware", env_func, FIRMWARE_FREQ, CTRL_FREQ))
+    env = make("firmware", env_func, FIRMWARE_FREQ, CTRL_FREQ)
+    # env = DroneRacingWrapper(env)
 
     # Load the controller module
     path = Path(__file__).parents[1] / controller
@@ -100,7 +101,7 @@ def simulate(
         # obs = [x, x_dot, y, y_dot, z, z_dot, phi, theta, psi, p, q, r]
         ctrl = ctrl_class(obs, info, verbose=config.verbose)
         gui_timer = p.addUserDebugText(
-            "", textPosition=[0, 0, 1], physicsClientId=env.pyb_client_id
+            "", textPosition=[0, 0, 1], physicsClientId=env.pyb_client
         )
         i = 0
         while not done:
@@ -114,7 +115,7 @@ def simulate(
                 parentObjectUniqueId=0,
                 parentLinkIndex=-1,
                 replaceItemUniqueId=gui_timer,
-                physicsClientId=env.pyb_client_id,
+                physicsClientId=env.pyb_client,
             )
 
             # Get the observation from the motion capture system
