@@ -279,6 +279,79 @@ class MultiProcessingWrapper(Wrapper):
         return info
 
 
+class RelativeObservationWrapper(Wrapper):
+    """Wrapper to alter the absolute observations from the environment to
+    relative observations for RL training.
+    """
+
+    def __init__(self, env: Env):
+        """Initialize the wrapper.
+
+        Args:
+            env: The environment.
+        """
+        super().__init__(env)
+
+    def reset(self, *args: Any, **kwargs: dict[str, Any]) -> np.ndarray:
+        """Reset the environment.
+
+        Args:
+            args: Positional arguments to pass to the firmware wrapper.
+            kwargs: Keyword arguments to pass to the firmware wrapper.
+
+        Returns:
+            The initial observation of the next episode.
+        """
+        obs, info = self.env.reset(*args, **kwargs)
+        obs = self._relative(obs)
+        return obs, info
+
+    def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict]:
+        """Take a step in the environment.
+
+        Args:
+            action: The action to take in the environment. See action space for details.
+
+        Returns:
+            The next observation, the reward, the terminated and truncated flags, and the info dict.
+        """
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        obs = self._relative(obs)
+        return obs, reward, terminated, truncated, info
+
+    def _relative(self, obs: np.ndarray) -> float:
+        """Compute the relative observations for the current step.
+
+        Args:
+            obs: The current observation.
+
+        Returns:
+            The computed reward.
+        """
+        # unchanged
+        drone = obs[:12]
+        gate_in_range = obs[28:32]
+        obstacle_in_range = obs[44:48]
+        gate_id = [obs[48]]
+
+        # relative gate positions
+        gate_poses = [o[:4] - obs[:4] for o in obs[12:28].reshape((4,4))]
+
+        # relative obstacle positions
+        obstacle_poses = [o[:3] - obs[:3] for o in obs[32:44].reshape((4,3))]
+
+        obs = np.concatenate([
+            drone,
+            np.array(gate_poses).flatten(),
+            gate_in_range,
+            np.array(obstacle_poses).flatten(),
+            obstacle_in_range,
+            gate_id
+        ])
+
+        return obs.astype(np.float32)
+
+
 class RewardWrapper(Wrapper):
     """Wrapper to alter the default reward function from the environment for RL training."""
 
@@ -349,7 +422,7 @@ class RewardWrapper(Wrapper):
             print(f"gate {self.current_gate} passed") # debugging
             self.current_gate = gate_id
             self.current_target = info["gates_pose"][gate_id, :3]
-            r_gate_passed = 1
+            r_gate_passed = 5
 
         # NOTE: inspired by "Reaching the limit in autonomous racing: Optimal
         #       control versus reinforcement learning", Yunlong et.al. 2023
@@ -360,11 +433,12 @@ class RewardWrapper(Wrapper):
         r_gate_progress = distance_previous - distance_current - bodyrate_penalty
 
         # bonus for each gate passed
-        # r_gate_passed = 0.1 * self.current_gate
+        # r_gate_passed = self.current_gate + 1 if r_gate_progress > 0 else 0
+        # r_gate_progress = r_gate_progress * r_gate_passed - bodyrate_penalty
 
         # crashing and lap completion
-        r_crash = -10 if terminated and not info["task_completed"] else 0
         r_lap = 10 if terminated and info["task_completed"] else 0
+        r_crash = -1 if (terminated and not info["task_completed"]) or truncated else 0
 
         # overall reward
         reward = r_gate_progress + r_gate_passed + r_crash + r_lap

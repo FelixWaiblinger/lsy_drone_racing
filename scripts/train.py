@@ -11,20 +11,21 @@ import yaml
 import numpy as np
 from munch import munchify
 from safe_control_gym.utils.registration import make
-from stable_baselines3 import PPO, SAC
+from stable_baselines3 import SAC
 # from stable_baselines3.common.env_util import make_vec_env
 # from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecCheckNan
 
-from lsy_drone_racing.utils import linear_schedule #, draw_policy
+from lsy_drone_racing.utils import linear_schedule
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import DroneRacingWrapper, RewardWrapper #, HoverRewardWrapper
+from lsy_drone_racing.wrapper import DroneRacingWrapper, RewardWrapper, RelativeObservationWrapper
 
 
-AGENT_PATH = "./agents/gate_tracking_sac"
+AGENT_PATH = "./agents/sac_relative_noconstR"
+# AGENT_PATH = "./agents/gate_tracking_sac"
 TRAIN_STEPS = 1_000_000
 CONFIG = "config/level0.yaml"
 LOG_FOLDER = "./ppo_drones_tensorboard/"
-LOG_NAME = "gate_tracking_sac"
+LOG_NAME = "sac_relative"
 
 
 def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
@@ -56,8 +57,10 @@ def create_race_env(config_path: Path, gui: bool = False) -> DroneRacingWrapper:
     #     # vec_env_kwargs={"start_method": "fork"}
     # )
     # env = VecCheckNan(env, raise_exception=True)
-    env = RewardWrapper(DroneRacingWrapper(env_factory()))
-    # env = HoverRewardWrapper(DroneRacingWrapper(env_factory()))
+
+    env = DroneRacingWrapper(env_factory())
+    env = RelativeObservationWrapper(env)
+    env = RewardWrapper(env)
 
     return env
 
@@ -68,7 +71,10 @@ def start_training():
     config_path = Path(__file__).resolve().parents[1] / CONFIG
     env = create_race_env(config_path=config_path, gui=False)
     agent = SAC("MlpPolicy", env, tensorboard_log=LOG_FOLDER,
-                learning_rate=linear_schedule(0.001, 0.5))
+                # learning_starts=10000,
+                # ent_coef=0.02,
+                # learning_rate=linear_schedule(0.001, 0.5)
+    )
 
     print("Training new agent...")
     agent.learn(
@@ -99,7 +105,6 @@ def evaluate():
     model = SAC.load(AGENT_PATH, env)
 
     obs, _ = env.reset()
-    # draw_policy(model, obs, size=(3, 3, 2))
     reward, episodes, state = 0, 1, 0
     for _ in range(10000):
         action, _ = model.predict(obs, deterministic=True)

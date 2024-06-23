@@ -96,7 +96,6 @@ def simulate(
         info["ctrl_freq"] = CTRL_FREQ
         # NOTE: not sure whether it is the cleanest way, but now the controller
         #       knows about the environment it's in
-        info["env"] = env
         lap_finished = False
         # obs = [x, x_dot, y, y_dot, z, z_dot, phi, theta, psi, p, q, r]
         ctrl = ctrl_class(obs, info, verbose=config.verbose)
