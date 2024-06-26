@@ -68,12 +68,12 @@ class Controller(BaseController):
         self.initial_obs = initial_obs
         self.VERBOSE = verbose
         self.BUFFER_SIZE = buffer_size
-        self.env = initial_info["env"]
         # Store a priori scenario information.
         self.NOMINAL_GATES = initial_info["nominal_gates_pos_and_type"]
         self.NOMINAL_OBSTACLES = initial_info["nominal_obstacles_pos"]
         self._drone_pose = None
         self.action_scale = np.array([1, 1, 1, np.pi])
+        self.state = 0
 
         # Reset counters and buffers.
         self.reset()
@@ -116,19 +116,34 @@ class Controller(BaseController):
         # REPLACE THIS (START) ##
         #########################
         
-        action, _ = self.model.predict(obs, deterministic=True)
+        zero = np.zeros(3)
+        self.state = self._check_state(ep_time, info)
 
-        action = self._action_transform(action)
+        # init -> takeoff
+        if self.state == 0:
+            command_type = Command.TAKEOFF
+            args = [0.05, 1]
+        # take off -> wait
+        elif self.state == 1:
+            command_type = Command.NONE
+            args = []
+        # wait -> fly
+        elif self.state == 2:
+            action, _ = self.model.predict(obs, deterministic=True)
+            action = self._action_transform(action).astype(np.float32).tolist()
+            command_type = Command.FULLSTATE
+            args = [action[:3], zero, zero, 0, zero, ep_time]
+        # fly -> notify
+        elif self.state == 3:
+            command_type = Command.NOTIFYSETPOINTSTOP
+            args = [] # TODO replace by correct
+        elif self.state == 4:
+            command_type = Command.LAND
+            args = [0, 3]
+        else:
+            command_type = Command.NONE
+            args = []
 
-        action = action.astype(np.float32)
-        target_pos = action[:3]
-        target_yaw = 0
-        target_vel = np.zeros(3)
-        target_acc = np.zeros(3)
-        target_rpy_rates = np.zeros(3)
-
-        command_type = Command.FULLSTATE
-        args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates, ep_time]
 
         #########################
         # REPLACE THIS (END) ####
@@ -163,6 +178,7 @@ class Controller(BaseController):
         # REPLACE THIS (START) ##
         #########################
 
+        self._drone_pose = obs[[0, 1, 2, 5]]
         # Store the last step's events.
         self.action_buffer.append(action)
         self.obs_buffer.append(obs)
@@ -211,3 +227,17 @@ class Controller(BaseController):
         action = self._drone_pose + (action * self.action_scale)
         action[3] = map2pi(action[3])  # Ensure yaw is in [-pi, pi]
         return action
+    
+    def _check_state(self, time, info):
+        if self.state == 0: # initialization state
+            return 1
+        elif self.state == 1 and time > 1: # take off state
+            return 2
+        elif self.state == 2 and info["task_completed"]: # flying state
+            return 3
+        elif self.state == 3: # notify state
+            return 4
+        elif self.state == 4: # landing state
+            return 5
+        else: # finished state
+            return 5
