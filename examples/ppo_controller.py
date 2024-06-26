@@ -117,12 +117,12 @@ class Controller(BaseController):
         #########################
         
         zero = np.zeros(3)
-        self.state = self._check_state(ep_time, info)
+        self.state = 2 #self._check_state(ep_time, info)
 
         # init -> takeoff
         if self.state == 0:
             command_type = Command.TAKEOFF
-            args = [0.05, 1]
+            args = [0.4, 1]
         # take off -> wait
         elif self.state == 1:
             command_type = Command.NONE
@@ -229,15 +229,16 @@ class Controller(BaseController):
         return action
     
     def _check_state(self, time, info):
+        print(self.state)
         if self.state == 0: # initialization state
             return 1
-        elif self.state == 1 and time > 1: # take off state
+        elif self.state == 1 and time < 1: # take off state
             return 2
-        elif self.state == 2 and info["task_completed"]: # flying state
+        elif self.state == 2 and time < 5:#info["task_completed"]: # flying state
             return 3
         elif self.state == 3: # notify state
             return 4
         elif self.state == 4: # landing state
             return 5
         else: # finished state
-            return 5
+            return self.state
