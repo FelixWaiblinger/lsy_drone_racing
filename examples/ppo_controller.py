@@ -33,6 +33,26 @@ from stable_baselines3.ppo import PPO
 from lsy_drone_racing.command import Command
 from lsy_drone_racing.controller import BaseController
 
+import logging
+from functools import partial
+from pathlib import Path
+import numpy as np
+
+import fire
+import yaml
+from munch import munchify
+from safe_control_gym.utils.registration import make
+from stable_baselines3 import PPO, SAC, DDPG,TD3,A2C
+from stable_baselines3.common.env_checker import check_env
+from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
+from lsy_drone_racing.constants import FIRMWARE_FREQ
+from lsy_drone_racing.wrapper import DroneRacingWrapper,HoverRewardWrapper, DroneRacingObservationWrapper, RewardWrapper
+
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
+
+
 class Controller(BaseController):
     """Template controller class."""
 
@@ -65,7 +85,7 @@ class Controller(BaseController):
         self.initial_obs = initial_obs
         self.VERBOSE = verbose
         self.BUFFER_SIZE = buffer_size
-
+        self.env = initial_info["env"]
         # Store a priori scenario information.
         self.NOMINAL_GATES = initial_info["nominal_gates_pos_and_type"]
         self.NOMINAL_OBSTACLES = initial_info["nominal_obstacles_pos"]
@@ -75,7 +95,8 @@ class Controller(BaseController):
         self.episode_reset()
 
         #NOTE: no need to pass the enviroment to PPO.load
-        self.model = PPO.load("./hover")
+       
+        self.model = PPO.load("/home/amin/Documents/repos/lsy_drone_racing/hover")
 
     def compute_control(
         self,
@@ -103,22 +124,24 @@ class Controller(BaseController):
         Returns:
             The command type and arguments to be sent to the quadrotor. See `Command`.
         """
-
         #########################
         # REPLACE THIS (START) ##
         #########################
         # Handcrafted solution for getting_stated scenario.
+        
         action, _ = self.model.predict(obs, deterministic=True)
+
         #ensure that action is float
         action = np.array(action, dtype=np.float32)
         action = action.tolist()
         target_pos = action[:3]
-        target_yaw = action[3]
-        # print(f"Step: {step}, Target: {target_pos}")
-        print(f"Current position: {obs[0:3]}")
+        target_yaw = 0
         target_vel = np.zeros(3)
         target_acc = np.zeros(3)
         target_rpy_rates = np.zeros(3)
+        # print(f"Step: {step}, Target: {target_pos}")
+        target_vel = np.zeros(3)
+        taDroneRacingObservationWrapperrget_rpy_rates = np.zeros(3)
         command_type = Command.FULLSTATE
         args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates, ep_time]
 

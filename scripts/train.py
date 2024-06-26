@@ -10,6 +10,8 @@ import numpy as np
 import fire
 import yaml
 from munch import munchify
+from typing import TYPE_CHECKING, Type, Callable
+
 from safe_control_gym.utils.registration import make
 from stable_baselines3 import PPO, SAC, DDPG,TD3,A2C
 from stable_baselines3.common.env_checker import check_env
@@ -25,11 +27,11 @@ from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "follow_traj_progress"
-SAVE_PATH = "./getting_started_PPO"
+SAVE_PATH = "./baseline_level2"
 TRAJ_PATH = "./reference_trajectory_steps.yaml"
-CONFI_PATH = "./config/level1.yaml"
-TRAIN_STEPS = 1000_000
-
+CONFI_PATH = "./config/level2.yaml"
+TRAIN_STEPS = 10_000
+N_ENVS = 2
 def create_race_env(config_path: Path, gui: bool = False) :
 
     def env_factory():
@@ -55,13 +57,27 @@ def create_race_env(config_path: Path, gui: bool = False) :
         return drone_racing_env
     env = make_vec_env(
         lambda: env_factory(),
-        n_envs = 2,
+        n_envs = N_ENVS,
         vec_env_cls=SubprocVecEnv
         )
 
     return env
 
 
+
+def linear_schedule(initial_value: float, slope: float=1) -> Callable[[float], float]:
+    """Linear learning rate schedule (current learning rate depending on
+    remaining progress)
+    """
+
+    assert 0 < slope < 1, f"Invalid slope {slope} in schedule!"
+
+    def func(progress_remaining: float) -> float:
+        """Progress will decrease from 1 (beginning) to 0"""
+
+        return initial_value * (1 - slope + slope * progress_remaining )
+
+    return func
 
 
 def train(
@@ -79,7 +95,8 @@ def train(
     else:
         print("Training new agent...")
         #smaller lr or batch size, toy problem mit nur hovern (reward anpassen)
-        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER, learning_rate=0.001)
+        #learing rate scheduler
+        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER,learning_rate=2e-2,ent_coef=0.001)
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True,tb_log_name=LOG_NAME)
     agent.save(SAVE_PATH)
 
@@ -109,7 +126,7 @@ def evaluate():
 
     '''
 
-    mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=50, deterministic=True)
+    mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=10, deterministic=True)
     print(f"{mean_reward = }")
     print(f"{std_reward = }")
     

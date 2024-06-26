@@ -743,20 +743,25 @@ class GateWrapper(Wrapper):
         if gate_id > self.current_gate:
             self.current_gate = gate_id
             self.current_target = info["gates_pose"][self.current_gate, :3]
-            gate_passed = 5
+            gate_passed = 10
 
         collision = -1 if terminated and not info["task_completed"] else 0
         bodyrate_penalty = 0.01 * np.linalg.norm(obs[9:12], ord=2)
         r_lap = 10 if terminated and info["task_completed"] else 0
-        if terminated and info["task_completed"]:
-            print("Agent completed the lap")
-        distance_previous = np.linalg.norm(self.current_target - self.previous_pos, ord=2)
-        distance_current = np.linalg.norm(self.current_target - obs[:3], ord=2)
-        # penalty for the z axis 
-        #z_penalty = np.abs(self.current_target[2] - obs[2])
-        #z_penalty = np.exp(-z_penalty)
-        gate_progress = distance_previous - distance_current
-        reward = gate_progress + r_lap + collision + gate_passed
+        #if terminated and info["task_completed"]:
+        #    print("Agent completed the lap")
+
+        #if terminated and not info["task_completed"]:
+        #    print("Agent crashed")
+        distance_previous_xy = np.linalg.norm(self.current_target[0:2] - self.previous_pos[:2], ord=2)
+        distance_current_xy = np.linalg.norm(self.current_target[0:2] - obs[:2], ord=2)
+        gate_progress_xy = distance_previous_xy - distance_current_xy
+
+        distance_previous_z = np.abs(self.current_target[2] - self.previous_pos[2])
+        distance_current_z = np.abs(self.current_target[2] - obs[2])
+        gate_progress_z = distance_previous_z - distance_current_z
+        
+        reward = gate_progress_xy + gate_progress_z +  r_lap + collision + gate_passed          
         # Update the previous position
         self.previous_pos = obs[:3]
         return reward
