@@ -18,7 +18,7 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import DroneRacingWrapper, RewardWrapper, GateWrapper
+from lsy_drone_racing.wrapper import DroneRacingWrapper, RewardWrapper, GateWrapper, HoverRewardWrapper
 
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
@@ -27,11 +27,11 @@ from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "follow_traj_progress"
-SAVE_PATH = "./baseline_level2"
+SAVE_PATH = "./baseline_level0"
 TRAJ_PATH = "./reference_trajectory_steps.yaml"
-CONFI_PATH = "./config/level2.yaml"
+CONFI_PATH = "./config/level0.yaml"
 TRAIN_STEPS = 10_000
-N_ENVS = 2
+N_ENVS = 1
 def create_race_env(config_path: Path, gui: bool = False) :
 
     def env_factory():
