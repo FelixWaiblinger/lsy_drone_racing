@@ -28,29 +28,12 @@ Tips:
 from __future__ import annotations  # Python 3.10 type hints
 
 import numpy as np
-from stable_baselines3.ppo import PPO
+from stable_baselines3 import PPO
 
-from lsy_drone_racing.command import Command
-from lsy_drone_racing.controller import BaseController
-
-import logging
-from functools import partial
-from pathlib import Path
-import numpy as np
-
-import fire
-import yaml
-from munch import munchify
-from safe_control_gym.utils.registration import make
-from stable_baselines3 import PPO, SAC, DDPG,TD3,A2C
-from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.evaluation import evaluate_policy
-from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import DroneRacingWrapper,HoverRewardWrapper, DroneRacingObservationWrapper, RewardWrapper
-
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
+from lsy_drone_racing.command import Command
+from lsy_drone_racing.rotations import map2pi
+from lsy_drone_racing.controller import BaseController
 
 
 class Controller(BaseController):
@@ -89,6 +72,8 @@ class Controller(BaseController):
         # Store a priori scenario information.
         self.NOMINAL_GATES = initial_info["nominal_gates_pos_and_type"]
         self.NOMINAL_OBSTACLES = initial_info["nominal_obstacles_pos"]
+        self._drone_pose = None
+        self.action_scale = np.array([1, 1, 1, np.pi])
 
         # Reset counters and buffers.
         self.reset()
@@ -97,6 +82,9 @@ class Controller(BaseController):
         #NOTE: no need to pass the enviroment to PPO.load
        
         self.model = PPO.load("/home/amin/Documents/repos/lsy_drone_racing/hover")
+
+    def reset(self):
+        self._drone_pose = self.initial_obs[[0, 1, 2, 5]]
 
     def compute_control(
         self,
@@ -127,21 +115,18 @@ class Controller(BaseController):
         #########################
         # REPLACE THIS (START) ##
         #########################
-        # Handcrafted solution for getting_stated scenario.
         
         action, _ = self.model.predict(obs, deterministic=True)
 
-        #ensure that action is float
-        action = np.array(action, dtype=np.float32)
-        action = action.tolist()
+        action = self._action_transform(action)
+
+        action = action.astype(np.float32)
         target_pos = action[:3]
         target_yaw = 0
         target_vel = np.zeros(3)
         target_acc = np.zeros(3)
         target_rpy_rates = np.zeros(3)
-        # print(f"Step: {step}, Target: {target_pos}")
-        target_vel = np.zeros(3)
-        taDroneRacingObservationWrapperrget_rpy_rates = np.zeros(3)
+
         command_type = Command.FULLSTATE
         args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates, ep_time]
 
@@ -213,3 +198,16 @@ class Controller(BaseController):
         #########################
         # REPLACE THIS (END) ####
         #########################
+
+    def _action_transform(self, action: np.ndarray) -> np.ndarray:
+        """Transform the action to the format expected by the firmware env.
+
+        Args:
+            action: The action to transform.
+
+        Returns:
+            The transformed action.
+        """
+        action = self._drone_pose + (action * self.action_scale)
+        action[3] = map2pi(action[3])  # Ensure yaw is in [-pi, pi]
+        return action
