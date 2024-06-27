@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 def simulate(
     config: str = "config/getting_started.yaml",
     controller: str = "examples/controller.py",
-    n_runs: int = 1,
+    n_runs: int = 3,
     gui: bool = True,
     terminate_on_lap: bool = True,
 ) -> list[float]:
@@ -86,6 +86,7 @@ def simulate(
 
     # Run the episodes.
     for _ in range(n_runs):
+        #print(env.reset())
         ep_start = time.time()
         done = False
         action = np.zeros(4)
