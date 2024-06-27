@@ -34,7 +34,7 @@ from lsy_drone_racing.constants import FIRMWARE_FREQ
 from lsy_drone_racing.command import Command
 from lsy_drone_racing.rotations import map2pi
 from lsy_drone_racing.controller import BaseController
-
+import os
 
 class Controller(BaseController):
     """Template controller class."""
@@ -80,8 +80,11 @@ class Controller(BaseController):
         self.episode_reset()
 
         #NOTE: no need to pass the enviroment to PPO.load
-       
-        self.model = PPO.load("/home/amin/Documents/repos/lsy_drone_racing/baseline_level0")
+        # get the the relative path of the model
+        MODEL = "four_gates"
+        # global PATH directory
+        PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", MODEL))
+        self.model = PPO.load(PATH)
 
     def reset(self):
         self._drone_pose = self.initial_obs[[0, 1, 2, 5]]
