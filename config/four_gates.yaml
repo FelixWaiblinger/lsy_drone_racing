@@ -1,4 +1,4 @@
-# Level 0
+# Level 5
 
 # | Evaluation Scenario | Constraints  | Rand. Inertial Properties | Randomized Obstacles, Gates | Rand. Between Episodes | Notes             |
 # | :-----------------: | :----------: | :-----------------------: | :-------------------------: | :--------------------: | :---------------: |
@@ -23,7 +23,7 @@ quadrotor_config:
   pyb_freq: 500 # If `use_firmware` == True, must be multiple of 500, otherwise it must be multiple of ctrl_freq
   episode_len_sec: 33  # Maximum episode duration, in seconds
 
-  done_on_violation: True # Whether `done` becomes True when a constraint is violated
+  done_on_violation: False # Whether `done` becomes True when a constraint is violated
   done_on_completion: True # Whether `done` becomes True when the task is completed (traveled all gates and 2'' hover at stabilization_goal)
   done_on_collision: True # Whether `done` becomes True when a collision happens
   cost: competition  # Sparse reward function, if you desire, re-implement it in Quadrotor._get_reward()
@@ -52,17 +52,14 @@ quadrotor_config:
   # Nominal (pre-randomization) positions of gates and obstacles
   gates:
     [  # x, y, z, r, p, y, type (0: `tall` obstacle, 1: `low` obstacle)
-      [0.45, -1.0, 0, 0, 0, 2.35, 1],
-      [1.0, -1.55, 0, 0, 0, -0.78, 0],
-      [0.0, 0.5, 0, 0, 0, 0, 1],
-      [-0.5, -0.5, 0, 0, 0, 3.14, 0]
+      [1.0,0.4, 0, 0, 0,0, 1],
+      [1.0,-0.5, 0, 0, 0,0.0, 1],
+       [1.0,-1.6, 0, 0, 0,0.0, 1],
+       [-0.4,-1.5, 0, 0, 0,1.5, 1],
     ]
   obstacles:
     [  # x, y, z, r, p, y
-      [1.0, -0.5, 0, 0, 0, 0],
-      [0.5, -1.5, 0, 0, 0, 0],
-      [-0.5, 0, 0, 0, 0, 0],
-      [0, 1.0, 0, 0, 0, 0]
+      [5, -1.7, 0, 0, 0, 0]
     ]
 
   # Randomization of the initial state

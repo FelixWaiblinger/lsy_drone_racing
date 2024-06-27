@@ -81,7 +81,7 @@ class Controller(BaseController):
 
         #NOTE: no need to pass the enviroment to PPO.load
        
-        self.model = PPO.load("/home/amin/Documents/repos/lsy_drone_racing/hover")
+        self.model = PPO.load("/home/amin/Documents/repos/lsy_drone_racing/baseline_level0")
 
     def reset(self):
         self._drone_pose = self.initial_obs[[0, 1, 2, 5]]
@@ -118,7 +118,7 @@ class Controller(BaseController):
         
         zero = np.zeros(3)
         self.state = 2 #self._check_state(ep_time, info)
-
+        print(info["current_gate_id"])
         # init -> takeoff
         if self.state == 0:
             command_type = Command.TAKEOFF
@@ -130,9 +130,9 @@ class Controller(BaseController):
         # wait -> fly
         elif self.state == 2:
             action, _ = self.model.predict(obs, deterministic=True)
-            action = self._action_transform(action).astype(np.float32).tolist()
+            action = self._action_transform(action).astype(np.float32).tolist()[:3]
             command_type = Command.FULLSTATE
-            args = [action[:3], zero, zero, 0, zero, ep_time]
+            args = [action, zero, zero, 0, zero, ep_time]
         # fly -> notify
         elif self.state == 3:
             command_type = Command.NOTIFYSETPOINTSTOP

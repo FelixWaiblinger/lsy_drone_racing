@@ -18,7 +18,7 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import DroneRacingWrapper, RewardWrapper, GateWrapper, HoverRewardWrapper
+from lsy_drone_racing.newwrapper import DroneRacingWrapper, RewardWrapper, HoverRewardWrapper
 
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
@@ -27,11 +27,12 @@ from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "follow_traj_progress"
-SAVE_PATH = "./baseline_level0"
+SAVE_PATH = "./progress_gates_obstacles_level8"
 TRAJ_PATH = "./reference_trajectory_steps.yaml"
-CONFI_PATH = "./config/level0.yaml"
-TRAIN_STEPS = 10_000
+CONFI_PATH = "./config/level8.yaml"
+TRAIN_STEPS = 1500_000
 N_ENVS = 1
+
 def create_race_env(config_path: Path, gui: bool = False) :
 
     def env_factory():
@@ -53,7 +54,7 @@ def create_race_env(config_path: Path, gui: bool = False) :
         env_factory = partial(make, "quadrotor", **config.quadrotor_config)
         firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
         drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
-        drone_racing_env = GateWrapper(drone_racing_env)
+        drone_racing_env = RewardWrapper(drone_racing_env)
         return drone_racing_env
     env = make_vec_env(
         lambda: env_factory(),
@@ -96,7 +97,7 @@ def train(
         print("Training new agent...")
         #smaller lr or batch size, toy problem mit nur hovern (reward anpassen)
         #learing rate scheduler
-        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER,learning_rate=2e-2,ent_coef=0.001)
+        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True,tb_log_name=LOG_NAME)
     agent.save(SAVE_PATH)
 

@@ -743,7 +743,7 @@ class GateWrapper(Wrapper):
         if gate_id > self.current_gate:
             self.current_gate = gate_id
             self.current_target = info["gates_pose"][self.current_gate, :3]
-            gate_passed = 10
+            gate_passed = 5
 
         collision = -1 if terminated and not info["task_completed"] else 0
         bodyrate_penalty = 0.01 * np.linalg.norm(obs[9:12], ord=2)
