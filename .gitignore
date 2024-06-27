@@ -6,3 +6,8 @@ logs
 secrets
 **/*.secret
 saves
+docker/build.sh
+docker/Dockerfile
+docker/entrypoint.sh
+docker/run.sh
+scripts/imitation_learning.ipynb
