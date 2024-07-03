@@ -1,30 +1,3 @@
-"""Write your control strategy.
-
-Then run:
-
-    $ python scripts/sim --config config/getting_started.yaml
-
-Tips:
-    Search for strings `INSTRUCTIONS:` and `REPLACE THIS (START)` in this file.
-
-    Change the code between the 5 blocks starting with
-        #########################
-        # REPLACE THIS (START) ##
-        #########################
-    and ending with
-        #########################
-        # REPLACE THIS (END) ####
-        #########################
-    with your own code.
-
-    They are in methods:
-        1) __init__
-        2) compute_control
-        3) step_learn (optional)
-        4) episode_learn (optional)
-
-"""
-
 from __future__ import annotations  # Python 3.10 type hints
 
 import numpy as np
@@ -34,7 +7,8 @@ from lsy_drone_racing.constants import FIRMWARE_FREQ
 from lsy_drone_racing.command import Command
 from lsy_drone_racing.rotations import map2pi
 from lsy_drone_racing.controller import BaseController
-
+import os
+from typing import Any
 
 class Controller(BaseController):
     """Template controller class."""
@@ -72,20 +46,24 @@ class Controller(BaseController):
         self.NOMINAL_GATES = initial_info["nominal_gates_pos_and_type"]
         self.NOMINAL_OBSTACLES = initial_info["nominal_obstacles_pos"]
         self._drone_pose = None
-        self.action_scale = np.array([1, 1, 1, np.pi])
-        self.state = 0
-
-        # Reset counters and buffers.
+        self.action_scale = np.array([1.0,1.0,1.0, np.pi])
+        self.state = None
+        self._takeoff = False
+        self.initial_info = initial_info        # Reset counters and buffers.
         self.reset()
         self.episode_reset()
 
-        #NOTE: no need to pass the enviroment to PPO.load
-       
-        self.model = PPO.load("/home/amin/Documents/repos/lsy_drone_racing/baseline_level0")
+        # NOTE: no need to pass the environment to PPO.load
+        # get the the relative path of the model
+        MODEL = "hover"
+        # global PATH directory
+        PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", MODEL))
+        self.model = PPO.load(PATH)
 
     def reset(self):
         self._drone_pose = self.initial_obs[[0, 1, 2, 5]]
-
+        
+        
     def compute_control(
         self,
         ep_time: float,
@@ -95,11 +73,6 @@ class Controller(BaseController):
         info: dict | None = None,
     ) -> tuple[Command, list]:
         """Pick command sent to the quadrotor through a Crazyswarm/Crazyradio-like interface.
-
-        INSTRUCTIONS:
-            Re-implement this method to return the target position, velocity, acceleration,
-            attitude, and attitude rates to be sent from Crazyswarm to the Crazyflie using, e.g., a
-            `cmdFullState` call.
 
         Args:
             ep_time: Episode's elapsed time, in seconds.
@@ -112,42 +85,40 @@ class Controller(BaseController):
         Returns:
             The command type and arguments to be sent to the quadrotor. See `Command`.
         """
-        #########################
-        # REPLACE THIS (START) ##
-        #########################
-        
-        zero = np.zeros(3)
-        self.state = 2 #self._check_state(ep_time, info)
-        print(info["current_gate_id"])
-        # init -> takeoff
-        if self.state == 0:
+        # Default command
+        command_type = Command.NONE
+        args = []
+        if not self._takeoff:
             command_type = Command.TAKEOFF
-            args = [0.4, 1]
-        # take off -> wait
-        elif self.state == 1:
-            command_type = Command.NONE
-            args = []
-        # wait -> fly
-        elif self.state == 2:
-            action, _ = self.model.predict(obs, deterministic=True)
-            action = self._action_transform(action).astype(np.float32).tolist()[:3]
-            command_type = Command.FULLSTATE
-            args = [action, zero, zero, 0, zero, ep_time]
-        # fly -> notify
-        elif self.state == 3:
-            command_type = Command.NOTIFYSETPOINTSTOP
-            args = [] # TODO replace by correct
-        elif self.state == 4:
-            command_type = Command.LAND
-            args = [0, 3]
+            args = [0.06, 2]  # Height, duration
+            self._takeoff = True  # Only send takeoff command once
         else:
-            command_type = Command.NONE
-            args = []
-
-
-        #########################
-        # REPLACE THIS (END) ####
-        #########################
+            if ep_time - 2 > 0 and not done:
+                # Get action from the model
+                action, _ = self.model.predict(obs, deterministic=True)
+                action = self._action_transform(action).astype(np.float32).tolist()[:3]
+                target_pos = np.array(action)
+                target_vel = np.zeros(3)
+                target_acc = np.zeros(3)
+                target_yaw = 0.0
+                target_rpy_rates = np.zeros(3)
+                command_type = Command.FULLSTATE
+                args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates, ep_time]
+            elif done:
+                if not self._setpoint_land:
+                    command_type = Command.NOTIFYSETPOINTSTOP
+                    args = []
+                    self._setpoint_land = True
+                elif not self._land:
+                    command_type = Command.GOTO
+                    args = [self._drone_pose[:3], 0.0, 2, True]  # pos, yaw, duration, relative
+                    self._land = True  # Send landing command only once
+                elif self._land:
+                    command_type = Command.FINISHED
+                    args = []
+                else:
+                    command_type = Command.NONE
+                    args = []
 
         return command_type, args
 
@@ -227,18 +198,16 @@ class Controller(BaseController):
         action = self._drone_pose + (action * self.action_scale)
         action[3] = map2pi(action[3])  # Ensure yaw is in [-pi, pi]
         return action
-    
-    def _check_state(self, time, info):
-        print(self.state)
-        if self.state == 0: # initialization state
-            return 1
-        elif self.state == 1 and time < 1: # take off state
-            return 2
-        elif self.state == 2 and time < 5:#info["task_completed"]: # flying state
-            return 3
-        elif self.state == 3: # notify state
-            return 4
-        elif self.state == 4: # landing state
-            return 5
-        else: # finished state
-            return self.state
+
+    def _action_transform_abs(self, action: np.ndarray) -> np.ndarray:
+        """Transform the action to the format expected by the firmware env.
+
+        Args:
+            action: The action to transform.
+
+        Returns:
+            The transformed action.
+        """
+        action = action * self.action_scale
+        action[3] = map2pi(action[3])
+        return action
