@@ -81,7 +81,7 @@ class Controller(BaseController):
 
         #NOTE: no need to pass the enviroment to PPO.load
         # get the the relative path of the model
-        MODEL = "four_gates"
+        MODEL = "baseline_getting_started"
         # global PATH directory
         PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", MODEL))
         self.model = PPO.load(PATH)
@@ -121,7 +121,6 @@ class Controller(BaseController):
         
         zero = np.zeros(3)
         self.state = 2 #self._check_state(ep_time, info)
-        print(info["current_gate_id"])
         # init -> takeoff
         if self.state == 0:
             command_type = Command.TAKEOFF

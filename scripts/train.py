@@ -18,20 +18,25 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.newwrapper import DroneRacingWrapper, RewardWrapper, HoverRewardWrapper
+from lsy_drone_racing.wrapper import DroneRacingWrapper, GateWrapper
 
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
-# import torch
+import torch
 
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
-LOG_NAME = "follow_traj_progress"
-SAVE_PATH = "./progress_gates_obstacles_level8"
-TRAJ_PATH = "./reference_trajectory_steps.yaml"
-CONFI_PATH = "./config/level8.yaml"
+LOG_NAME = "level2"
+SAVE_PATH = "./baseline_level2"
+CONFI_PATH = "./config/level2.yaml"
 TRAIN_STEPS = 1500_000
 N_ENVS = 1
+
+#### On-policy algorithms ##################################
+onpolicy_kwargs = dict(activation_fn=torch.nn.ReLU,
+                        net_arch=[128, 128, dict(vf=[256], pi=[256])]
+                        # net_arch=[128, 128, dict(vf=[256], pi=[128, 256])]
+                        )
 
 def create_race_env(config_path: Path, gui: bool = False) :
 
@@ -54,7 +59,7 @@ def create_race_env(config_path: Path, gui: bool = False) :
         env_factory = partial(make, "quadrotor", **config.quadrotor_config)
         firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
         drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
-        drone_racing_env = RewardWrapper(drone_racing_env)
+        drone_racing_env = GateWrapper(drone_racing_env)
         return drone_racing_env
     env = make_vec_env(
         lambda: env_factory(),
@@ -92,7 +97,8 @@ def train(
 
     if resume:
         print("Continuing...")
-        agent = PPO.load(SAVE_PATH, env)
+        custom_objects = {"policy_kwargs": onpolicy_kwargs}
+        agent = PPO.load(SAVE_PATH, env,custom_objects=custom_objects)
     else:
         print("Training new agent...")
         #smaller lr or batch size, toy problem mit nur hovern (reward anpassen)

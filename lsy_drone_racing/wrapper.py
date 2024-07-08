@@ -29,7 +29,7 @@ from safe_control_gym.controllers.firmware.firmware_wrapper import FirmwareWrapp
 
 from lsy_drone_racing.rotations import map2pi
 import yaml
-
+import time
 logger = logging.getLogger(__name__)
 
 class DroneRacingWrapper(Wrapper):
@@ -94,10 +94,15 @@ class DroneRacingWrapper(Wrapper):
         # NOTE: target_limits = [5,5,5] for the target position
         #euclidean_distance_limit = np.linalg.norm([5,5,5], ord=2)
         #target_limits = [5,5,5]
+        #time limits
+
+        #set a boundary matrix 4x3 for the target position
+        direction_vector = [5,5,5]
+        boundary_limits = [5, 5, 5] * 4  # 4 points, each with 3 coordinates (x, y, z)
         drone_limits = [5, 5, 5, np.pi, np.pi, np.pi, 10, 10, 10, 10, 10, 10]
         gate_limits = [5, 5, 5, np.pi] * n_gates + [1] * n_gates  # Gate poses and range mask
         obstacle_limits = [5, 5, 5] * n_obstacles + [1] * n_obstacles  # Obstacle pos and range mask
-        obs_limits = drone_limits + gate_limits + obstacle_limits + [n_gates] #+ [euclidean_distance_limit]   # [1] for gate_id
+        obs_limits = drone_limits + gate_limits + obstacle_limits + [n_gates]#  + boundary_limits+  direction_vector # [1] for gate_id
         obs_limits_high = np.array(obs_limits)
         obs_limits_low = np.concatenate([-obs_limits_high[:-1], [-1]])
         self.observation_space = Box(obs_limits_low, obs_limits_high, dtype=np.float32)
@@ -188,7 +193,9 @@ class DroneRacingWrapper(Wrapper):
         obs = self.observation_transform(obs, info).astype(np.float32)
         self._drone_pose = obs[[0, 1, 2, 5]]
         if obs not in self.observation_space:
-            terminated = True
+            #terminated = True
+            #print(self.observation_space)
+            pass
         self._reset_required = terminated or truncated
         return obs, reward, terminated, truncated, info
 
@@ -245,7 +252,8 @@ class DroneRacingWrapper(Wrapper):
         drone_rpy = obs[6:9]
         drone_ang_vel = obs[8:11]
         #get the time of the simulation
-       
+        boundary_matrix = np.zeros((4, 3))
+        # define the direction vector 
         obs = np.concatenate(
             [
                 drone_pos,
@@ -256,11 +264,14 @@ class DroneRacingWrapper(Wrapper):
                 info["gates_in_range"],
                 info["obstacles_pose"][:, :3].flatten(),
                 info["obstacles_in_range"],
-                [info["current_gate_id"]]
-                #[0]
+                [info["current_gate_id"]],
+                #boundary_matrix.flatten(),
+                #[0,0,0],
             ]
         )
         return obs
+    #add addtional features to the observation such as distance to the next gate, distance to the next obstacle, relative pose to the next gate, relative pose to the next obstacle
+    
 
 class DroneRacingObservationWrapper:
     """Wrapper to transform the observation space the firmware wrapper.
@@ -331,6 +342,7 @@ class DroneRacingObservationWrapper:
         obs = DroneRacingWrapper.observation_transform(obs, info)
         return obs, reward, done, info, action
 
+
 class HoverRewardWrapper(Wrapper):
     """Wrapper to alter the default reward function from the environment for RL training."""
 
@@ -341,6 +353,8 @@ class HoverRewardWrapper(Wrapper):
             env: The firmware wrapper.
         """
         super().__init__(env)
+        self.previous_pos = None
+
 
 
     def reset(self, *args: Any, **kwargs: dict[str, Any]) -> np.ndarray:
@@ -358,6 +372,7 @@ class HoverRewardWrapper(Wrapper):
         # wrapper.
         del info["symbolic_model"]
         del info["symbolic_constraints"]
+        self.previous_pos = obs[:3]
         return obs, info
 
 
@@ -390,145 +405,29 @@ class HoverRewardWrapper(Wrapper):
             The computed reward.
 
         """
-        #print info keys
         distance = np.linalg.norm(obs[:3] - np.ones(3), ord=2)
         distance_penalty = np.exp(-distance)
         collision = terminated 
         crash_penalty = -1 if collision else 0
-        print(info["time"])
+        # Update the previous position
+        self.previous_pos = obs[:3]
         return distance_penalty  + crash_penalty
+    
 
-
-class FollowTrajRewardWrapper(Wrapper):
+class GateRewardWrapper(Wrapper):
     """Wrapper to alter the default reward function from the environment for RL training."""
-
-    def __init__(self, env: Env, yaml_path: str):
+    def __init__(self, env: Env):
         """Initialize the wrapper.
 
         Args:
             env: The firmware wrapper.
             yaml_path: Path to the YAML file containing the trajectory.
         """
-        self.yaml_path = yaml_path
-        self.trajectory_points = self.load_trajectory()
-        super().__init__(env)
-        self.current_step = 0  # Initialize the step counter
-        self.previous_position = None
-        self.start_waypoint = self.trajectory_points[self.current_step][1:]
-
-    def load_trajectory(self):
-        """Load the trajectory from a YAML file and return the trajectory points."""
-        with open(self.yaml_path, 'r') as file:
-            data = yaml.safe_load(file)
-
-        steps = data['steps']
-        x_values = data['ref_x']
-        y_values = data['ref_y']
-        z_values = data['ref_z']
-
-        # Combine the data into a list of tuples containing (step, x, y, z) coordinates
-        trajectory_points = [(step, x, y, z) for step, x, y, z in zip(steps, x_values, y_values, z_values)]
-        return trajectory_points
-
-    def get_trajectory(self):
-        """Return the loaded trajectory points."""
-        return self.trajectory_points
-
-    def get_point_at_step(self, step):
-        """Return the trajectory point corresponding to the given step."""
-        if step < len(self.trajectory_points):
-            return self.trajectory_points[step][1:]  # Return (x, y, z)
-        else:
-            # If step is out of bounds, return the last point
-            return self.trajectory_points[-1][1:]
-
-    def reset(self, *args: Any, **kwargs: dict[str, Any]) -> np.ndarray:
-        """Reset the environment.
-
-        Args:
-            args: Positional arguments to pass to the firmware wrapper.
-            kwargs: Keyword arguments to pass to the firmware wrapper.
-
-        Returns:
-            The initial observation of the next episode.
-        """
-        obs, info = self.env.reset(*args, **kwargs)
-        del info["symbolic_model"]
-        del info["symbolic_constraints"]
-        self.current_step = 0  # Reset the step counter
-        obs[-3:] = self.start_waypoint
-        self.previous_pos = obs[:3]
-        return obs, info
-
-    def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict]:
-        """Take a step in the environment.
-
-        Args:
-            action: The action to take in the environment. See action space for details.
-
-        Returns:
-            The next observation, the reward, the terminated and truncated flags, and the info dict.
-        """
-        obs, reward, terminated, truncated, info = self.env.step(action)
-        obs[-3:] = self.get_point_at_step(self.current_step)
-        reward = self._compute_reward(obs, reward, terminated, truncated, info)
-        # Check if the drone is close enough to the current waypoint
-        distance_xy = np.linalg.norm(obs[:2] - obs[-3:-1], ord=2)
-        distance_z = np.abs(obs[2] - obs[-1])
-        if distance_xy < 0.2 and distance_z < 0.2:
-            print(f"Reached waypoint {self.current_step}")
-            self.current_step += 1
-
-
-        return obs, reward, terminated, truncated, info
-
-    def _compute_reward(
-        self, obs: np.ndarray, reward: float, terminated: bool, truncated: bool, info: dict
-    ) -> float:
-        """Compute the reward for the current step.
-
-        Args:
-            obs: The current observation.
-            reward: The reward from the environment.
-            terminated: True if the episode is terminated.
-            truncated: True if the episode is truncated.
-            info: Additional information from the environment.
-
-        Returns:
-            The computed reward.
-        """
-
-        # Compute the distance to the trajectory point at the current step
-        next_waypoint = self.get_point_at_step(self.current_step)
-        distance_previous = np.linalg.norm(next_waypoint - self.previous_pos, ord=2)
-        distance_current = np.linalg.norm(next_waypoint - obs[:3], ord=2)
-        trajectory_progress = distance_previous - distance_current
-        distance_xy  = np.linalg.norm(obs[:2] - next_waypoint[:2], ord=2)
-        distance_z = np.abs(obs[2] - next_waypoint[2])
-        #print(f"Distance to z = {distance_z}")
-        collision = -1 if terminated and not info["task_completed"] else 0
-        reward = trajectory_progress 
-      
-        self.previous_pos = obs[:3]
-        return reward
-
-
-class RewardWrapper(Wrapper):
-    """Wrapper to alter the default reward function from the environment for RL training."""
-
-    def __init__(self, env: Env):
-        """Initialize the wrapper.
-
-        Args:
-            env: The firmware wrapper.
-        """
         super().__init__(env)
         self.current_gate = None
         self.current_target = None
+        self.current_target_yaw = None
         self.previous_pos = None
-        self.gate_clear_width = 0.41  # 41 cm clear passage width
-        self.total_gate_width = 0.59  # 59 cm total gate width
-        self.border_width = 0.09      # 9 cm border width
 
     def reset(self, *args: Any, **kwargs: dict[str, Any]) -> np.ndarray:
         """Reset the environment.
@@ -540,15 +439,98 @@ class RewardWrapper(Wrapper):
         Returns:
             The initial observation of the next episode.
         """
-
         obs, info = self.env.reset(*args, **kwargs)
         del info["symbolic_model"]
         del info["symbolic_constraints"]
         self.current_gate = info["current_gate_id"]
         self.current_target = info["gates_pose"][self.current_gate, :3]
+        self.current_target_yaw = info["gates_pose"][self.current_gate, 5]
         self.previous_pos = obs[:3]
-        #obs[-1] = 0
         return obs, info
+
+    def compute_rotation_matrix_z(self,yaw):
+        """Compute the rotation matrix around the Z-axis (yaw angle).
+
+        Args:
+            yaw: Yaw angle in radians.
+
+        Returns:
+            Rotation matrix for the Z-axis rotation.
+        """
+        cos_yaw = np.cos(yaw)
+        sin_yaw = np.sin(yaw)
+
+        rotation_matrix = np.array([
+            [cos_yaw, -sin_yaw, 0],
+            [sin_yaw, cos_yaw, 0],
+            [0, 0, 1]
+        ])
+
+        return rotation_matrix
+    
+
+    def compute_additional_features(self, obs: np.ndarray, info: dict[str, Any]) -> np.ndarray:
+        """Compute additional features for the observation.
+
+        Args:
+            obs: The observation to compute additional features for.
+            info: Additional information to include in the observation.
+
+        Returns:
+            The observation with additional features.
+        """
+        # Compute the distance to the next gate
+        next_gate = info["gates_pose"][info["current_gate_id"]]
+
+        #define a boundary matrix for the next gate with zeros and shape 4x3
+        boundary_matrix = np.zeros((4, 3))
+         # Define gate dimensions
+        margin_size = 0.3  # 30 cm margins from the middle point
+        half_margin = margin_size / 2
+
+        # Get the correct height of the gate based on the gate id
+        if self.current_gate % 2 == 0:
+            gate_height = 0.525
+        else:
+            gate_height = 1.0
+
+        corners_local = np.array([
+            [half_margin, half_margin, gate_height+half_margin],
+            [half_margin, -half_margin, gate_height-half_margin],
+            [-half_margin, -half_margin, gate_height-half_margin],
+            [-half_margin, half_margin, gate_height+half_margin]
+        ])
+
+        # Rotate the corners to the gate's orientation (yaw)
+        gate_yaw = next_gate[5]  # Assuming yaw is in radians
+        rotation_matrix = self.compute_rotation_matrix_z(gate_yaw)
+        corners_world = corners_local @ rotation_matrix.T
+
+        # Convert corners to relative pose (relative to drone's current position)
+        drone_position = obs[:3]  # Assuming drone position is at the start of observation
+        relative_corners = corners_world - drone_position
+        boundary_matrix = relative_corners
+        direction_vector = next_gate[:3] - drone_position
+        # Add the additional features to the observation
+        obs[-3:] = direction_vector
+        obs[-15:-3] = boundary_matrix.flatten()
+
+        """   
+         distance_to_gate = np.linalg.norm(next_gate - obs[:3], ord=2)
+        # Compute the relative pose to the next gate
+        cos_goal, sin_goal = np.cos(next_gate[2]), np.sin(next_gate[2])
+        relative_pose = np.array(
+            [
+                cos_goal * (obs[0] - next_gate[0]) - sin_goal * (obs[1] - next_gate[1]),
+                sin_goal * (obs[0] - next_gate[0]) + cos_goal * (obs[1] - next_gate[1]),
+                obs[2] - next_gate[2],
+            ]
+        )
+        # Add the additional features to the observation
+        obs[-4:-1] = relative_pose
+        #obs[-1] = distance_to_gate
+        """
+        return obs
 
     def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict]:
         """Take a step in the environment.
@@ -559,19 +541,10 @@ class RewardWrapper(Wrapper):
         Returns:
             The next observation, the reward, the terminated and truncated flags, and the info dict.
         """
-
-        #gate_id = info["current_gate_id"]
-        #if gate_id > self.current_gate:
-        #    self.current_gate = gate_id
-        #    self.current_target = info["gates_pose"][self.current_gate, :3]
-        #obs[-1] = np.linalg.norm(self.current_target - obs[:3], ord=2)
-        # Compute the progress towards the current gate
-        #distance_previous = np.linalg.norm(self.current_target - self.previous_pos, ord=2)
-        #distance_current = np.linalg.norm(self.current_target - obs[:3], ord=2)
-        #trajectory_progress = distance_previous - distance_current
-        #obs[-1] = trajectory_progress
-        #self.previous_pos = obs[:3]
-        obs, reward, terminated, truncated, info = self.env.step(action)
+        #set yaw to zero
+        action[3] = 0
+        obs, reward, terminated, truncated, info = self.env.step(action)      
+        obs = self.compute_additional_features(obs, info)
         reward = self._compute_reward(obs, reward, terminated, truncated, info)
         return obs, reward, terminated, truncated, info
     
@@ -590,90 +563,33 @@ class RewardWrapper(Wrapper):
         Returns:
             The computed reward.
         """
+
+        # NOTE: set gate_passed reward to 5 and r_lap to 10 DON'T CHANGE THIS
+        gate_passed =0
         gate_id = info["current_gate_id"]
-        obstacles_in_range = info["obstacles_in_range"]
-        obstacle_id = np.where(obstacles_in_range)
-        obstacles_list = []
-
-        obstacle_penality = 0
-        gate_passed = 0
-
         if gate_id > self.current_gate:
             self.current_gate = gate_id
             self.current_target = info["gates_pose"][self.current_gate, :3]
-            gate_passed = 1
+            self.current_target_yaw = info["gates_pose"][self.current_gate, 5]
+            gate_passed = 5
 
-
-        #if np.any(obstacles_in_range) and terminated:
-        #    obstacle_id = np.where(obstacles_in_range)[0][0]
-            #euclican distance from the position of the crash to the current target
-
-
-
-
-
-            #maximal distance from the obstacle to the target
-
-            #print(f"Obstacle penality: {obstacle_penality}")
-
-            #if self._check_bounding_box(obs[:3], self.current_target):
-            #    print(f"Passed gate {self.current_gate}")
-                #gate_passed = 10
-            #    gate_passed = 10
-            #    
         collision = -1 if terminated and not info["task_completed"] else 0
-        #bodyrate_penalty = 0.01 * np.linalg.norm(obs[9:12], ord=2)
-        # Compute the reward
-        distance_previous = np.linalg.norm(self.current_target - self.previous_pos, ord=2)
-        distance_current = np.linalg.norm(self.current_target - obs[:3], ord=2)
-        #get the distance to the nearest obstacle in range
-        #penalize the drone if it is close to an obstacle of the obstacle is in range
+        r_lap = 10 if terminated and info["task_completed"] else 0
+        distance_previous_xy = np.linalg.norm(self.current_target[0:2] - self.previous_pos[:2], ord=2)
+        distance_current_xy = np.linalg.norm(self.current_target[0:2] - obs[:2], ord=2)
+        gate_progress_xy = distance_previous_xy - distance_current_xy
 
-        if np.any(obstacles_in_range):
-            #iterate over the obstacles in range and get the distance to the drone and append it to the list
-            for i in obstacle_id[0]:
-                obstacles_list.append(np.linalg.norm(obs[:3] - info["obstacles_pose"][i, :3], ord=2))
-            obstacles_list = np.array(obstacles_list)
-            #get the minimum distance to the drone
-            min_distance = np.min(obstacles_list)
-            #penalize the drone if it is close to an obstacle
-            obstacle_penality = 1 / min_distance
-            # distance to the nearest obstacle
-            #dist_obstacle = np.linalg.norm(obs[:3] - info["obstacles_pose"][obstacle_id[0][0], :3],axis=1, ord=2)
-            #min_distance = np.min(dist_obstacle)    
-            #obstacle_penality = 1 / min_distance
+        distance_previous_z = np.abs(self.current_target[2] - self.previous_pos[2])
+        distance_current_z = np.abs(self.current_target[2] - obs[2])
+        gate_progress_z = distance_previous_z - distance_current_z
+        gate_progress = gate_progress_xy + gate_progress_z
 
-    
-        trajectory_progress = distance_previous  - distance_current 
-        #print(f"Trajectory progress: {trajectory_progress}")
-        reward = trajectory_progress + collision 
+        reward =  gate_progress + r_lap + collision + gate_passed 
+
         # Update the previous position
         self.previous_pos = obs[:3]
         return reward
     
-    def _check_bounding_box(self, drone_pose: np.ndarray, current_target: np.ndarray) -> bool:
-        """Check if the drone has passed through the current gate without touching the borders."""
-        x_g, y_g, _ = current_target
-        x_min_clear = x_g - self.gate_clear_width / 2
-        x_max_clear = x_g + self.gate_clear_width / 2
-        y_min_clear = y_g - self.gate_clear_width / 2
-        y_max_clear = y_g + self.gate_clear_width / 2
-        in_clear_x_range = x_min_clear <= drone_pose[0] <= x_max_clear
-        in_clear_y_range = y_min_clear <= drone_pose[1] <= y_max_clear
-        print(f"X: {x_max_clear}, Y: {y_max_clear}")
-        passed_gate_clear = in_clear_x_range and in_clear_y_range 
-        return passed_gate_clear
-    
-    def _check_obstacle_collision(self, obs: np.ndarray, info: dict) -> bool:
-        
-        """Check if the drone near of any obstacle using info["obstacles_in_range"]."""
-        obstacles_in_range = info["obstacles_in_range"]
-        if np.any(obstacles_in_range):
-            print("Obstacle collision detected")
-            obstacles = - 0.1
-            return True
-        return False
-
 
 class GateWrapper(Wrapper):
     """Wrapper to alter the default reward function from the environment for RL training."""
@@ -743,16 +659,12 @@ class GateWrapper(Wrapper):
         if gate_id > self.current_gate:
             self.current_gate = gate_id
             self.current_target = info["gates_pose"][self.current_gate, :3]
-            gate_passed = 10
+            gate_passed = 5
 
-        collision = -1 if terminated and not info["task_completed"] else 0
+        #collision = -1 if terminated and not info["task_completed"] else 0
+        collision = -1 if info["collision"][1] else 0 
         bodyrate_penalty = 0.01 * np.linalg.norm(obs[9:12], ord=2)
-        r_lap = 10 if terminated and info["task_completed"] else 0
-        #if terminated and info["task_completed"]:
-        #    print("Agent completed the lap")
-
-        #if terminated and not info["task_completed"]:
-        #    print("Agent crashed")
+        r_lap = 10 if terminated and info["task_completed"] and not info["collision"][1] else 0
         distance_previous_xy = np.linalg.norm(self.current_target[0:2] - self.previous_pos[:2], ord=2)
         distance_current_xy = np.linalg.norm(self.current_target[0:2] - obs[:2], ord=2)
         gate_progress_xy = distance_previous_xy - distance_current_xy
@@ -760,8 +672,9 @@ class GateWrapper(Wrapper):
         distance_previous_z = np.abs(self.current_target[2] - self.previous_pos[2])
         distance_current_z = np.abs(self.current_target[2] - obs[2])
         gate_progress_z = distance_previous_z - distance_current_z
-        
         reward = gate_progress_xy + gate_progress_z +  r_lap + collision + gate_passed          
+
         # Update the previous position
         self.previous_pos = obs[:3]
         return reward
+    
