@@ -1,4 +1,6 @@
 from __future__ import annotations  # Python 3.10 type hints
+import os
+from typing import Any
 
 import numpy as np
 from stable_baselines3 import PPO
@@ -7,8 +9,6 @@ from lsy_drone_racing.constants import FIRMWARE_FREQ
 from lsy_drone_racing.command import Command
 from lsy_drone_racing.rotations import map2pi
 from lsy_drone_racing.controller import BaseController
-import os
-from typing import Any
 
 class Controller(BaseController):
     """Template controller class."""
@@ -85,25 +85,22 @@ class Controller(BaseController):
         Returns:
             The command type and arguments to be sent to the quadrotor. See `Command`.
         """
+        zero = np.zeros(3)
         # Default command
         command_type = Command.NONE
         args = []
         if not self._takeoff:
             command_type = Command.TAKEOFF
-            args = [0.06, 2]  # Height, duration
+            args = [0.06, 1]  # Height, duration
             self._takeoff = True  # Only send takeoff command once
         else:
             if ep_time - 2 > 0 and not done:
                 # Get action from the model
                 action, _ = self.model.predict(obs, deterministic=True)
-                action = self._action_transform(action).astype(np.float32).tolist()[:3]
-                target_pos = np.array(action)
-                target_vel = np.zeros(3)
-                target_acc = np.zeros(3)
-                target_yaw = 0.0
-                target_rpy_rates = np.zeros(3)
+                action[3] = 0
+                action = self._action_transform(action).astype(float)
                 command_type = Command.FULLSTATE
-                args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates, ep_time]
+                args = [action[:3], zero, zero, action[3], zero, ep_time]
             elif done:
                 if not self._setpoint_land:
                     command_type = Command.NOTIFYSETPOINTSTOP
