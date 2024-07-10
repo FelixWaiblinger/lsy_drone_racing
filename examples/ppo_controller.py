@@ -10,6 +10,7 @@ from lsy_drone_racing.command import Command
 from lsy_drone_racing.rotations import map2pi
 from lsy_drone_racing.controller import BaseController
 
+
 class Controller(BaseController):
     """Template controller class."""
 
@@ -46,10 +47,10 @@ class Controller(BaseController):
         self.NOMINAL_GATES = initial_info["nominal_gates_pos_and_type"]
         self.NOMINAL_OBSTACLES = initial_info["nominal_obstacles_pos"]
         self._drone_pose = None
-        self.action_scale = np.array([1.0,1.0,1.0, np.pi])
+        self.action_scale = np.array([1.0, 1.0, 1.0, np.pi])
         self.state = None
         self._takeoff = False
-        self.initial_info = initial_info        # Reset counters and buffers.
+        self.initial_info = initial_info  # Reset counters and buffers.
         self.reset()
         self.episode_reset()
 
@@ -62,8 +63,7 @@ class Controller(BaseController):
 
     def reset(self):
         self._drone_pose = self.initial_obs[[0, 1, 2, 5]]
-        
-        
+
     def compute_control(
         self,
         ep_time: float,
@@ -99,8 +99,10 @@ class Controller(BaseController):
                 action, _ = self.model.predict(obs, deterministic=True)
                 action[3] = 0
                 action = self._action_transform(action).astype(float)
-                command_type = Command.FULLSTATE
+                action[:3] = obs[:3] + (action[:3] - obs[:3]) * 0.1
                 args = [action[:3], zero, zero, action[3], zero, ep_time]
+                command_type = Command.FULLSTATE
+                # args = [action[:3], zero, zero, action[3], zero, ep_time]
             elif done:
                 if not self._setpoint_land:
                     command_type = Command.NOTIFYSETPOINTSTOP
