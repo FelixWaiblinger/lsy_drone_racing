@@ -34,9 +34,9 @@ logger = logging.getLogger(__name__)
 
 
 def simulate(
-    config: str = "config/getting_started.yaml",
-    controller: str = "examples/controller.py",
-    n_runs: int = 3,
+    config: str = "config/level3.yaml",
+    controller: str = "examples/ppo_controller.py",
+    n_runs: int = 10,
     gui: bool = True,
     terminate_on_lap: bool = True,
 ) -> list[float]:
@@ -68,7 +68,8 @@ def simulate(
     # user sends ctrl signals, not the firmware.
     config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
     env_func = partial(make, "quadrotor", **config.quadrotor_config)
-    env = DroneRacingObservationWrapper(make("firmware", env_func, FIRMWARE_FREQ, CTRL_FREQ))
+    env = make("firmware", env_func, FIRMWARE_FREQ, CTRL_FREQ)
+    env = DroneRacingObservationWrapper(env)
 
     # Load the controller module
     path = Path(__file__).parents[1] / controller
@@ -177,6 +178,7 @@ def log_episode_stats(stats: dict, info: dict, config: Munch, curr_time: float, 
             f"Gates passed: {stats['gates_passed']}\n"
             f"Total reward: {stats['ep_reward']}\n"
             f"Number of collisions: {stats['collisions']}\n"
+            f"Collided with: {stats['collision_objects']}\n"
             f"Number of constraint violations: {stats['violations']}\n"
         )
     )

@@ -30,11 +30,9 @@ from __future__ import annotations  # Python 3.10 type hints
 import numpy as np
 from stable_baselines3 import PPO
 
-from lsy_drone_racing.constants import FIRMWARE_FREQ
 from lsy_drone_racing.command import Command
 from lsy_drone_racing.rotations import map2pi
 from lsy_drone_racing.controller import BaseController
-import os
 
 class Controller(BaseController):
     """Template controller class."""
@@ -79,12 +77,7 @@ class Controller(BaseController):
         self.reset()
         self.episode_reset()
 
-        #NOTE: no need to pass the enviroment to PPO.load
-        # get the the relative path of the model
-        MODEL = "four_gates"
-        # global PATH directory
-        PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", MODEL))
-        self.model = PPO.load(PATH)
+        self.model = PPO.load("models/baseline_level3")
 
     def reset(self):
         self._drone_pose = self.initial_obs[[0, 1, 2, 5]]
@@ -118,14 +111,27 @@ class Controller(BaseController):
         #########################
         # REPLACE THIS (START) ##
         #########################
+
+        # avoid illegal gate poses
+        clip = lambda x, y: np.clip(x, -y, y)
+        gate_limit = np.array([5, 5, 5, np.pi])
+        obst_limit = np.array([5, 5, 5])
+
+        gates = obs[12:28].reshape((4,4))
+        obsts = obs[32:44].reshape((4,3))
+        gate_poses = np.array([clip(gate, gate_limit) for gate in gates])
+        obst_poses = np.array([clip(obst, obst_limit) for obst in obsts])
+        obs[12:28] = gate_poses.flatten().astype(np.float32)
+        obs[32:44] = obst_poses.flatten().astype(np.float32)
         
+        # state machine
         zero = np.zeros(3)
         self.state = 2 #self._check_state(ep_time, info)
-        print(info["current_gate_id"])
+        # print(info["current_gate_id"])
         # init -> takeoff
         if self.state == 0:
             command_type = Command.TAKEOFF
-            args = [0.4, 1]
+            args = [0.1, 1]
         # take off -> wait
         elif self.state == 1:
             command_type = Command.NONE
@@ -133,9 +139,10 @@ class Controller(BaseController):
         # wait -> fly
         elif self.state == 2:
             action, _ = self.model.predict(obs, deterministic=True)
-            action = self._action_transform(action).astype(np.float32).tolist()[:3]
+            action[3] = 0
+            action = self._action_transform(action).astype(float)
             command_type = Command.FULLSTATE
-            args = [action, zero, zero, 0, zero, ep_time]
+            args = [action[:3], zero, zero, action[3], zero, ep_time]
         # fly -> notify
         elif self.state == 3:
             command_type = Command.NOTIFYSETPOINTSTOP
@@ -177,23 +184,7 @@ class Controller(BaseController):
             info: Most recent information dictionary.
 
         """
-        #########################
-        # REPLACE THIS (START) ##
-        #########################
-
         self._drone_pose = obs[[0, 1, 2, 5]]
-        # Store the last step's events.
-        self.action_buffer.append(action)
-        self.obs_buffer.append(obs)
-        self.reward_buffer.append(reward)
-        self.done_buffer.append(done)
-        self.info_buffer.append(info)
-
-        # Implement some learning algorithm here if needed
-
-        #########################
-        # REPLACE THIS (END) ####
-        #########################
 
     def episode_learn(self):
         """Learning and controller updates called between episodes.
@@ -204,19 +195,7 @@ class Controller(BaseController):
             re-plan.
 
         """
-        #########################
-        # REPLACE THIS (START) ##
-        #########################
-
-        _ = self.action_buffer
-        _ = self.obs_buffer
-        _ = self.reward_buffer
-        _ = self.done_buffer
-        _ = self.info_buffer
-
-        #########################
-        # REPLACE THIS (END) ####
-        #########################
+        pass
 
     def _action_transform(self, action: np.ndarray) -> np.ndarray:
         """Transform the action to the format expected by the firmware env.
@@ -232,7 +211,7 @@ class Controller(BaseController):
         return action
     
     def _check_state(self, time, info):
-        print(self.state)
+        # print(self.state)
         if self.state == 0: # initialization state
             return 1
         elif self.state == 1 and time < 1: # take off state

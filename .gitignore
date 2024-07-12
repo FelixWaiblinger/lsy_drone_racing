@@ -16,3 +16,6 @@ reference_trajectory_time.yaml
 reference_trajectory_steps.yaml
 docker
 scripts/imitation_learning.ipynb
+
+*.zip
+!baseline_level3.zip
