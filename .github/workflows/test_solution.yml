@@ -45,6 +45,7 @@ jobs:
       - run: |
           pip install --upgrade pip
           pip install .
+          pip install stable-baselines3
         shell: bash -el {0}
       - name: Run simulation tests
         run: python scripts/kaggle.py
