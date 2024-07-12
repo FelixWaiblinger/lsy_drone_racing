@@ -23,7 +23,7 @@ from safe_control_gym.utils.utils import sync
 
 from lsy_drone_racing.command import apply_sim_command
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.utils import load_config, load_controller
+from lsy_drone_racing.utils.utils import load_config, load_controller
 from lsy_drone_racing.wrapper import DroneRacingObservationWrapper
 
 if TYPE_CHECKING:
