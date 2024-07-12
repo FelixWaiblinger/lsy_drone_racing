@@ -79,8 +79,8 @@ def load_config(path: Path) -> Munch:
 
 
 def simulate(
-    config: str = "config/getting_started.yaml",
-    controller: str = "examples/controller.py",
+    config: str = "config/level3.yaml",
+    controller: str = "examples/ppo_controller.py",
     n_runs: int = 10,
     gui: bool = True,
     terminate_on_lap: bool = True,
