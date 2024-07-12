@@ -10,7 +10,4 @@ saves
 ppo_drones_tensorboard/
 *.zip
 
-!models/baseline_level3.zip
-!models/ppo_gs_l3_m_1_lrl1.zip
-!models/ppo_gs_l3_l_9_fine.zip
-!models/ppo_gs_l3_l_5.zip
+!models/*.zip
