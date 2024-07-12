@@ -127,7 +127,6 @@ class Controller(BaseController):
         # state machine
         zero = np.zeros(3)
         self.state = 2 #self._check_state(ep_time, info)
-        # print(info["current_gate_id"])
         # init -> takeoff
         if self.state == 0:
             command_type = Command.TAKEOFF
