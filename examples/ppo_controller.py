@@ -77,7 +77,7 @@ class Controller(BaseController):
         self.reset()
         self.episode_reset()
 
-        self.model = PPO.load("models/ppo_gs_l3_l_5")
+        self.model = PPO.load("models/ppo_gs_l3_l_9_fine")
 
     def reset(self):
         self._drone_pose = self.initial_obs[[0, 1, 2, 5]]
