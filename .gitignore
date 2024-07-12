@@ -3,3 +3,6 @@
 **/__pycache__/
 submission.csv
 logs
+
+ppo_drones_tensorboard/
+*.zip
