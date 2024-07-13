@@ -16,3 +16,14 @@ reference_trajectory_time.yaml
 reference_trajectory_steps.yaml
 docker
 scripts/imitation_learning.ipynb
+*plots
+baseline_level2.zip
+baseline_level3.zip
+getting_started.zip
+race_level3.zip
+config/dummy_env.yaml
+actions_martin.csv
+actions.csv
+lsy_drone_racing/racewrapper.py
+models/baseline.zip
+models/race_level3.zip
