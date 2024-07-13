@@ -34,7 +34,8 @@ from lsy_drone_racing.command import Command
 from lsy_drone_racing.controller import BaseController
 from lsy_drone_racing.utils import draw_trajectory
 import yaml
-
+import csv
+waypoint_list = []
 class Controller(BaseController):
     """Template controller class."""
 
@@ -205,7 +206,7 @@ class Controller(BaseController):
 
         if not self._take_off:
             command_type = Command.TAKEOFF
-            args = [0.3, 2]  # Height, duration
+            args = [.3, 2]  # Height, duration
             self._take_off = True  # Only send takeoff command once
         else:
             step = iteration - 2 * self.CTRL_FREQ  # Account for 2s delay due to takeoff
@@ -221,6 +222,9 @@ class Controller(BaseController):
                 target_yaw = 0.0
                 target_rpy_rates = np.zeros(3)
                 command_type = Command.FULLSTATE
+                waypoint_list.append([ep_time, obs[0], obs[1], obs[2]])
+                self._save_actions_to_csv(waypoint_list)
+
                 args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates, ep_time]
             # Notify set point stop has to be called every time we transition from low-level
             # commands to high-level ones. Prepares for landing
@@ -307,3 +311,7 @@ class Controller(BaseController):
         #########################
         # REPLACE THIS (END) ####
         #########################
+    def _save_actions_to_csv(self, action: list):
+        with open('actions_martin.csv', 'w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerows(action)

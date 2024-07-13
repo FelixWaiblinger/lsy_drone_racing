@@ -637,6 +637,7 @@ class GateWrapper(Wrapper):
         action[3] = 0
         obs, reward, terminated, truncated, info = self.env.step(action)
         reward = self._compute_reward(obs, reward, terminated, truncated, info)
+
         return obs, reward, terminated, truncated, info
     
     def _compute_reward(

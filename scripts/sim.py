@@ -34,9 +34,9 @@ logger = logging.getLogger(__name__)
 
 
 def simulate(
-    config: str = "config/getting_started.yaml",
-    controller: str = "examples/controller.py",
-    n_runs: int = 3,
+    config: str = "config/level3.yaml",
+    controller: str = "examples/ppo_controller.py",
+    n_runs: int = 10,
     gui: bool = True,
     terminate_on_lap: bool = True,
 ) -> list[float]:
@@ -92,6 +92,7 @@ def simulate(
         action = np.zeros(4)
         reward = 0
         obs, info = env.reset()
+        prev_action = obs[:3]
         info["ctrl_timestep"] = CTRL_DT
         info["ctrl_freq"] = CTRL_FREQ
         lap_finished = False
@@ -118,6 +119,8 @@ def simulate(
             # Get the observation from the motion capture system
             # Compute control input.
             command_type, args = ctrl.compute_control(curr_time, obs, reward, done, info)
+            print(np.linalg.norm(np.array(prev_action) - np.array(args[:3]), ord=2))
+            prev_action = args[:3]
             # Apply the control input to the drone. This is a deviation from the gym API as the
             # action is not applied in env.step()
             apply_sim_command(env, command_type, args)

@@ -28,14 +28,13 @@ Tips:
 from __future__ import annotations  # Python 3.10 type hints
 
 import numpy as np
-from stable_baselines3 import PPO
-import csv
-from lsy_drone_racing.constants import FIRMWARE_FREQ
+from scipy import interpolate
+
 from lsy_drone_racing.command import Command
-from lsy_drone_racing.rotations import map2pi
 from lsy_drone_racing.controller import BaseController
-import os
-waypoint_list = []
+from lsy_drone_racing.utils import draw_trajectory
+import yaml
+
 class Controller(BaseController):
     """Template controller class."""
 
@@ -54,8 +53,9 @@ class Controller(BaseController):
             constants, counters, pre-plan trajectories, etc.
 
         Args:
-            initial_obs: The initial observation of the quadrotor's state
-                [x, x_dot, y, y_dot, z, z_dot, phi, theta, psi, p, q, r].
+            initial_obs: The initial observation of the environment's state. Consists of
+                [drone_xyz_yaw, gates_xyz_yaw, gates_in_range, obstacles_xyz, obstacles_in_range,
+                gate_id]
             initial_info: The a priori information as a dictionary with keys 'symbolic_model',
                 'nominal_physical_parameters', 'nominal_gates_pos_and_type', etc.
             buffer_size: Size of the data buffers used in method `learn()`.
@@ -68,27 +68,37 @@ class Controller(BaseController):
         self.initial_obs = initial_obs
         self.VERBOSE = verbose
         self.BUFFER_SIZE = buffer_size
+
         # Store a priori scenario information.
         self.NOMINAL_GATES = initial_info["nominal_gates_pos_and_type"]
         self.NOMINAL_OBSTACLES = initial_info["nominal_obstacles_pos"]
-        self._drone_pose = None
-        self.action_scale = np.array([1, 1, 1, np.pi])
-        self.state = 0
 
         # Reset counters and buffers.
         self.reset()
         self.episode_reset()
+    
+        self._take_off = False
+        self._setpoint_land = False
+        self._land = False
+        #########################
+        # REPLACE THIS (END) ####
+        #########################
 
-        #NOTE: no need to pass the enviroment to PPO.load
-        # get the the relative path of the model
-        MODEL = "race_level3"
-        # global PATH directory
-        PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", MODEL))
-        self.model = PPO.load(PATH)
+    def save_trajectory_to_yaml(self, filename: str):
+        """Save the reference trajectory to a YAML file."""
+        steps = list(range(len(self.waypoints)))
 
-    def reset(self):
-        self._drone_pose = self.initial_obs[[0, 1, 2, 5]]
+        trajectory_data = {
+            'steps': steps,
+            'ref_x': self.waypoints[:, 0].tolist(),
+            'ref_y': self.waypoints[:, 1].tolist(),
+            'ref_z': self.waypoints[:, 2].tolist(),
+        }
 
+        with open(filename, 'w') as file:
+            yaml.dump(trajectory_data, file)
+
+    #parse the yaml file and save into numpy arrays
     def compute_control(
         self,
         ep_time: float,
@@ -106,7 +116,8 @@ class Controller(BaseController):
 
         Args:
             ep_time: Episode's elapsed time, in seconds.
-            obs: The quadrotor's Vicon data [x, 0, y, 0, z, 0, phi, theta, psi, 0, 0, 0].
+            obs: The environment's observation [drone_xyz_yaw, gates_xyz_yaw, gates_in_range,
+                obstacles_xyz, obstacles_in_range, gate_id].
             reward: The reward signal.
             done: Wether the episode has terminated.
             info: Current step information as a dictionary with keys 'constraint_violation',
@@ -115,47 +126,25 @@ class Controller(BaseController):
         Returns:
             The command type and arguments to be sent to the quadrotor. See `Command`.
         """
+        iteration = int(ep_time * self.CTRL_FREQ)
+
         #########################
         # REPLACE THIS (START) ##
         #########################
-        
-        zero = np.zeros(3)
-        self.state = 2 #self._check_state(ep_time, info)
-        # init -> takeoff
-        if self.state == 0:
-            command_type = Command.TAKEOFF
-            args = [0.4, 1]
-        # take off -> wait
-        elif self.state == 1:
-            command_type = Command.NONE
-            args = []
-        # wait -> fly
-        elif self.state == 2:
-            action, _ = self.model.predict(obs, deterministic=True)
-            action[3] = 0
-            action = self._action_transform(action).astype(float)
-            #append ep_time and action to the list
-            waypoint_list.append([ep_time, obs[0], obs[1], obs[2]])
-            self._save_actions_to_csv(waypoint_list)
-            command_type = Command.FULLSTATE
-            print(action[3])
-            args = [action[:3], zero, zero, 0, zero, ep_time]
-        # fly -> notify
-        elif self.state == 3:
-            command_type = Command.NOTIFYSETPOINTSTOP
-            args = [] # TODO replace by correct
-        elif self.state == 4:
-            command_type = Command.LAND
-            args = [0, 3]
-        else:
-            command_type = Command.NONE
-            args = []
 
+        # Handcrafted solution for getting_stated scenario.
 
-        #########################
-        # REPLACE THIS (END) ####
-        #########################
-
+        target_pos = np.array([1.5,1.5,1.0])
+        #print(f"Step: {step}, Target: {target_pos}")
+        #print(f"Current position: {obs[0], obs[2], obs[4]}")
+        #print current action
+        #print(f"Current action: {target_pos}")
+        target_vel = np.zeros(3)
+        target_acc = np.zeros(3)
+        target_yaw = 0.0
+        target_rpy_rates = np.zeros(3)
+        command_type = Command.FULLSTATE
+        args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates, ep_time]
         return command_type, args
 
     def step_learn(
@@ -185,7 +174,6 @@ class Controller(BaseController):
         # REPLACE THIS (START) ##
         #########################
 
-        self._drone_pose = obs[[0, 1, 2, 5]]
         # Store the last step's events.
         self.action_buffer.append(action)
         self.obs_buffer.append(obs)
@@ -221,35 +209,3 @@ class Controller(BaseController):
         #########################
         # REPLACE THIS (END) ####
         #########################
-
-    def _action_transform(self, action: np.ndarray) -> np.ndarray:
-        """Transform the action to the format expected by the firmware env.
-
-        Args:
-            action: The action to transform.
-
-        Returns:
-            The transformed action.
-        """
-        action = self._drone_pose + (action * self.action_scale)
-        action[3] = map2pi(action[3])  # Ensure yaw is in [-pi, pi]
-        return action
-    
-    def _check_state(self, time, info):
-        if self.state == 0: # initialization state
-            return 1
-        elif self.state == 1 and time < 1: # take off state
-            return 2
-        elif self.state == 2 and time < 5:#info["task_completed"]: # flying state
-            return 3
-        elif self.state == 3: # notify state
-            return 4
-        elif self.state == 4: # landing state
-            return 5
-        else: # finished state
-            return self.state
-        
-    def _save_actions_to_csv(self, action: list):
-        with open('actions.csv', 'w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerows(action)

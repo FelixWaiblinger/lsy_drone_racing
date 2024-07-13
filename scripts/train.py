@@ -18,25 +18,19 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.wrapper import DroneRacingWrapper, GateWrapper
-
+#from lsy_drone_racing.wrapper import DroneRacingWrapper, GateWrapper
+from lsy_drone_racing.racewrapper import RaceWrapper, DroneRacingWrapper
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 import torch
 
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
-LOG_NAME = "level2"
-SAVE_PATH = "./baseline_level2"
-CONFI_PATH = "./config/level2.yaml"
-TRAIN_STEPS = 1500_000
-N_ENVS = 1
-
-#### On-policy algorithms ##################################
-onpolicy_kwargs = dict(activation_fn=torch.nn.ReLU,
-                        net_arch=[128, 128, dict(vf=[256], pi=[256])]
-                        # net_arch=[128, 128, dict(vf=[256], pi=[128, 256])]
-                        )
+LOG_NAME = "level3"
+SAVE_PATH = "./race_level3"
+CONFI_PATH = "./config/level3.yaml"
+TRAIN_STEPS = 500_000
+N_ENVS = 5
 
 def create_race_env(config_path: Path, gui: bool = False) :
 
@@ -59,7 +53,7 @@ def create_race_env(config_path: Path, gui: bool = False) :
         env_factory = partial(make, "quadrotor", **config.quadrotor_config)
         firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
         drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
-        drone_racing_env = GateWrapper(drone_racing_env)
+        drone_racing_env = RaceWrapper(drone_racing_env)
         return drone_racing_env
     env = make_vec_env(
         lambda: env_factory(),
@@ -97,13 +91,16 @@ def train(
 
     if resume:
         print("Continuing...")
-        custom_objects = {"policy_kwargs": onpolicy_kwargs}
-        agent = PPO.load(SAVE_PATH, env,custom_objects=custom_objects)
+        agent = PPO.load(SAVE_PATH, env)
     else:
         print("Training new agent...")
         #smaller lr or batch size, toy problem mit nur hovern (reward anpassen)
         #learing rate scheduler
-        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)
+        policy_kwargs = dict(
+            net_arch=[dict(pi=[128, 128], vf=[128, 128])],
+            activation_fn=torch.nn.ReLU,
+        )
+        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER, policy_kwargs= policy_kwargs)
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True,tb_log_name=LOG_NAME)
     agent.save(SAVE_PATH)
 
@@ -114,7 +111,7 @@ def evaluate():
     test_env = create_race_env(config_path=path_to_config, gui=True)
     model = PPO.load(SAVE_PATH, test_env)
 
-    # NOTE: from Martin Schuck
+    # NOTE: from Martin Schuck<s
     
     '''
     for i in range(10):

@@ -81,7 +81,7 @@ class Controller(BaseController):
 
         #NOTE: no need to pass the enviroment to PPO.load
         # get the the relative path of the model
-        MODEL = "race_level3"
+        MODEL = "baseline_level0"
         # global PATH directory
         PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", MODEL))
         self.model = PPO.load(PATH)
@@ -139,7 +139,7 @@ class Controller(BaseController):
             self._save_actions_to_csv(waypoint_list)
             command_type = Command.FULLSTATE
             print(action[3])
-            args = [action[:3], zero, zero, 0, zero, ep_time]
+            args = [action[:3], zero, zero, action[3], zero, ep_time]
         # fly -> notify
         elif self.state == 3:
             command_type = Command.NOTIFYSETPOINTSTOP
