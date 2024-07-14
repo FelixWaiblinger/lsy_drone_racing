@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 def simulate(
-    config: str = "config/level3.yaml",
+    config: str = "config/level0.yaml",
     controller: str = "examples/ppo_controller.py",
     n_runs: int = 10,
     gui: bool = True,

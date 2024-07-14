@@ -30,7 +30,7 @@ LOG_NAME = "level3"
 SAVE_PATH = "./race_level3"
 CONFI_PATH = "./config/level3.yaml"
 TRAIN_STEPS = 500_000
-N_ENVS = 5
+N_ENVS = 1
 
 def create_race_env(config_path: Path, gui: bool = False) :
 
