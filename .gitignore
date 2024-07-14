@@ -1,6 +1,7 @@
 .vscode/
 **.egg-info/
 **/__pycache__/
+build/
 submission.csv
 logs
 secrets

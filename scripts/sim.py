@@ -23,8 +23,21 @@ from safe_control_gym.utils.utils import sync
 
 from lsy_drone_racing.command import apply_sim_command
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-from lsy_drone_racing.utils import load_config, load_controller
+# from lsy_drone_racing.utils import load_config, load_controller
+
 from lsy_drone_racing.wrapper import DroneRacingObservationWrapper
+
+import importlib.util
+from typing import TYPE_CHECKING, Type
+
+import sys
+
+import yaml
+
+from munch import munchify
+
+from lsy_drone_racing.controller import BaseController
+
 
 if TYPE_CHECKING:
     from munch import Munch
@@ -32,6 +45,40 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def load_controller(path: Path) -> Type[BaseController]:
+    """Load the controller module from the given path and return the Controller class.
+
+    Args:
+        path: Path to the controller module.
+    """
+    assert path.exists(), f"Controller file not found: {path}"
+    assert path.is_file(), f"Controller path is not a file: {path}"
+    spec = importlib.util.spec_from_file_location("controller", path)
+    controller_module = importlib.util.module_from_spec(spec)
+    sys.modules["controller"] = controller_module
+    spec.loader.exec_module(controller_module)
+    assert hasattr(controller_module, "Controller")
+    assert issubclass(controller_module.Controller, BaseController)
+
+    try:
+        return controller_module.Controller
+    except ImportError as e:
+        raise e
+
+
+def load_config(path: Path) -> Munch:
+    """Load the race config file.
+
+    Args:
+        path: Path to the config file.
+
+    Returns:
+        The munchified config dict.
+    """
+    assert path.exists(), f"Configuration file not found: {path}"
+    with open(path, "r") as file:
+        return munchify(yaml.safe_load(file))
 
 def simulate(
     config: str = "config/level3.yaml",

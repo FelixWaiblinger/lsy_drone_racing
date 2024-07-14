@@ -19,7 +19,7 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.callbacks import EvalCallback, BaseCallback
 from lsy_drone_racing.constants import FIRMWARE_FREQ, CTRL_TIMESTEP
-from lsy_drone_racing.newwrapper import DroneRacingWrapper, RewardWrapper, HoverRewardWrapper
+from lsy_drone_racing.newwrapper import DroneRacingWrapper, RewardWrapper
 
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
@@ -27,13 +27,13 @@ from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "ppo_gs_l3"#"ppo_large"
-LOAD_PATH = "./ppo_gs_l3_m_lrl1"#"./models/baseline_getting_started"
-SAVE_PATH = "./ppo_gs_l3_l"
+LOAD_PATH = "./ppo_gs_l3_l_5"#"./models/baseline_getting_started"
+SAVE_PATH = "./ppo_gs_l3_l_5"
 TRAJ_PATH = "./reference_trajectory_steps.yaml"
 CONFI_PATH = "./config/level3.yaml"
 TRAIN_STEPS = 3_000_000
 N_ENVS = 4
-END = "9_fine"
+END = "next9"
 
 # NOTE: abbreviations
 # gs            = getting started
@@ -127,24 +127,24 @@ def train(gui: bool = False, resume: bool = False):
     logging.basicConfig(level=logging.INFO)
     config_path = Path(__file__).resolve().parents[1] / CONFI_PATH
     env = create_race_env(config_path=config_path, gui=gui)
-    # eval_env = create_race_env(config_path=config_path, gui=gui)
+    eval_env = create_race_env(config_path=config_path, gui=gui)
 
-    # save = "./best/" + END + "/"
-    # reset_callback = ResetCallback(env, n_episodes=10)
-    # eval_callback = EvalCallback(
-    #     eval_env,
-    #     best_model_save_path=save,
-    #     log_path=save + "logs/",
-    #     eval_freq=1000,
-    #     deterministic=True,
-    #     render=False
-    # )
+    save = "./best/" + END + "/"
+    reset_callback = ResetCallback(env, n_episodes=10)
+    eval_callback = EvalCallback(
+        eval_env,
+        best_model_save_path=save,
+        log_path=save + "logs/",
+        eval_freq=1000,
+        deterministic=True,
+        render=False
+    )
 
     if resume:
         print("Continuing...")
         custom_objects = {
             'learning_rate': linear_schedule(0.00003, slope=0.5),#0.00001,
-            # 'n_epochs': 5,
+            # 'n_epochs': 15,
             # 'n_steps': 4096,
         }
         agent = PPO.load(LOAD_PATH, env, custom_objects=custom_objects)
@@ -161,13 +161,13 @@ def train(gui: bool = False, resume: bool = False):
         # )
         agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)#, policy_kwargs=onpolicy_kwargs)
 
-    # for _ in range(10):
-    agent.learn(
-        total_timesteps=TRAIN_STEPS,# // 10,
-        progress_bar=True,
-        tb_log_name=LOG_NAME,
-        # callback=reset_callback #[reset_callback, eval_callback]
-    )
+    for _ in range(6):
+        agent.learn(
+            total_timesteps=TRAIN_STEPS // 6,
+            progress_bar=True,
+            tb_log_name=LOG_NAME,
+            callback=[reset_callback, eval_callback]
+        )
     agent.save(SAVE_PATH + "_" + str(END))
     print(f"Saved model {END}")
 
