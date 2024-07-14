@@ -18,19 +18,19 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPolicy
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-#from lsy_drone_racing.wrapper import DroneRacingWrapper, GateWrapper
-from lsy_drone_racing.racewrapper import RaceWrapper, DroneRacingWrapper
+from lsy_drone_racing.wrapper import DroneRacingWrapper, GateWrapper
+#from lsy_drone_racing.racewrapper import RaceWrapper, DroneRacingWrapper
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 import torch
 
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
-LOG_NAME = "level3"
-SAVE_PATH = "./race_level3"
-CONFI_PATH = "./config/level3.yaml"
-TRAIN_STEPS = 500_000
-N_ENVS = 1
+LOG_NAME = "level1_plot"
+SAVE_PATH = "./baseline_level1"
+CONFI_PATH = "./config/level1.yaml"
+TRAIN_STEPS = 1000_000
+N_ENVS = 5
 
 def create_race_env(config_path: Path, gui: bool = False) :
 
@@ -53,7 +53,7 @@ def create_race_env(config_path: Path, gui: bool = False) :
         env_factory = partial(make, "quadrotor", **config.quadrotor_config)
         firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
         drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
-        drone_racing_env = RaceWrapper(drone_racing_env)
+        drone_racing_env = GateWrapper(drone_racing_env)
         return drone_racing_env
     env = make_vec_env(
         lambda: env_factory(),
