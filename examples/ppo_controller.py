@@ -76,7 +76,6 @@ class Controller(BaseController):
         # Reset counters and buffers.
         self.reset()
         self.episode_reset()
-
         self.model = PPO.load("models/ppo_gs_l3_l_5")
         # self.model = PPO.load("models/baseline_level3")
 
