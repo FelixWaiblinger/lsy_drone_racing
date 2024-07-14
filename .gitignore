@@ -12,3 +12,4 @@ ppo_drones_tensorboard/
 *.zip
 
 !models/*.zip
+!try_kaggle/*.zip

@@ -76,7 +76,7 @@ class Controller(BaseController):
         # Reset counters and buffers.
         self.reset()
         self.episode_reset()
-        self.model = PPO.load("models/baseline_level3")
+        self.model = PPO.load("try_kaggle/ppo_gs_l3_l_5_next5")
         # self.model = PPO.load("models/baseline_level3")
 
     def reset(self):
