@@ -15,6 +15,8 @@
     - [Setting up your GitHub repo for the competition](#setting-up-your-github-repo-for-the-competition)
     - [Submitting your latest iteration](#submitting-your-latest-iteration)
   - [Creating your own controller](#creating-your-own-controller)
+  - [Flying using reinforcement learning](#flying-using-reinforcement-learning)
+
   - [Common errors](#common-errors)
   - [Deployment (**NOT IMPORTANT FOR STUDENTS FOR NOW**)](#deployment-not-important-for-students-for-now)
     - [Hardware setup](#hardware-setup)
@@ -153,6 +155,14 @@ Once you have pushed your latest iteration, a GitHub action runner will start te
 ## Creating your own controller
 
 To implement your own controller, have a look at the [example implementation](./examples/controller.py). We recommend altering the existing example controller instead of creating your own file to not break the testing pipeline. Please also read through the documentation of the controller. You **must not** alter its function signatures. If you encounter problems implementing something with the given interface, contact one of the lecturers.
+
+## Flying using reinforcement learning
+
+To try out reinforcement learning, select the difficulty level ```scripts/sim.py``` and the baseline model in ```examples/ppo_controller.py```. All models are available ```models/...```
+  
+  ```
+  python scripts/sim.py --config config/level3.yaml --controller examples/ppo_controller.py
+  ```
 
 ## Common errors
 
