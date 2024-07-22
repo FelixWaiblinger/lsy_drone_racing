@@ -33,7 +33,7 @@ from scipy import interpolate
 from lsy_drone_racing.command import Command
 from lsy_drone_racing.controller import BaseController
 from lsy_drone_racing.utils import draw_trajectory
-
+import yaml
 
 class Controller(BaseController):
     """Template controller class."""
@@ -76,7 +76,9 @@ class Controller(BaseController):
         # Reset counters and buffers.
         self.reset()
         self.episode_reset()
-
+        
+        # NOTE: from Amin Seffo
+        self.waypoints = None
         #########################
         # REPLACE THIS (START) ##
         #########################
@@ -84,57 +86,60 @@ class Controller(BaseController):
         # Example: Hard-code waypoints through the gates. Obviously this is a crude way of
         # completing the challenge that is highly susceptible to noise and does not generalize at
         # all. It is meant solely as an example on how the drones can be controlled
-        waypoints = []
-        waypoints.append([self.initial_obs[0], self.initial_obs[1], 0.3])
+        self.waypoints = []
+        self.waypoints.append([self.initial_obs[0], self.initial_obs[1], 0.3])
         gates = self.NOMINAL_GATES
         z_low = initial_info["gate_dimensions"]["low"]["height"]
         z_high = initial_info["gate_dimensions"]["tall"]["height"]
-        waypoints.append([1, 0, z_low])
-        waypoints.append([gates[0][0] + 0.2, gates[0][1] + 0.1, z_low])
-        waypoints.append([gates[0][0] + 0.1, gates[0][1], z_low])
-        waypoints.append([gates[0][0] - 0.1, gates[0][1], z_low])
-        waypoints.append(
+        self.waypoints.append([1, 0, z_low])
+        self.waypoints.append([gates[0][0] + 0.2, gates[0][1] + 0.1, z_low])
+        self.waypoints.append([gates[0][0] + 0.1, gates[0][1], z_low])
+        self.waypoints.append([gates[0][0] - 0.1, gates[0][1], z_low])
+        self.waypoints.append(
             [
                 (gates[0][0] + gates[1][0]) / 2 - 0.7,
                 (gates[0][1] + gates[1][1]) / 2 - 0.3,
                 (z_low + z_high) / 2,
             ]
         )
-        waypoints.append(
+        self.waypoints.append(
             [
                 (gates[0][0] + gates[1][0]) / 2 - 0.5,
                 (gates[0][1] + gates[1][1]) / 2 - 0.6,
                 (z_low + z_high) / 2,
             ]
         )
-        waypoints.append([gates[1][0] - 0.3, gates[1][1] - 0.2, z_high])
-        waypoints.append([gates[1][0] + 0.2, gates[1][1] + 0.2, z_high])
-        waypoints.append([gates[2][0], gates[2][1] - 0.4, z_low])
-        waypoints.append([gates[2][0], gates[2][1] + 0.2, z_low])
-        waypoints.append([gates[2][0], gates[2][1] + 0.2, z_high + 0.2])
-        waypoints.append([gates[3][0], gates[3][1] + 0.1, z_high])
-        waypoints.append([gates[3][0], gates[3][1] - 0.1, z_high + 0.1])
-        waypoints.append(
+        self.waypoints.append([gates[1][0] - 0.3, gates[1][1] - 0.2, z_high])
+        self.waypoints.append([gates[1][0] + 0.2, gates[1][1] + 0.2, z_high])
+        self.waypoints.append([gates[2][0], gates[2][1] - 0.4, z_low])
+        self.waypoints.append([gates[2][0], gates[2][1] + 0.2, z_low])
+        self.waypoints.append([gates[2][0], gates[2][1] + 0.2, z_high + 0.2])
+        self.waypoints.append([gates[3][0], gates[3][1] + 0.1, z_high])
+        self.waypoints.append([gates[3][0], gates[3][1] - 0.1, z_high + 0.1])
+        self.waypoints.append(
             [
                 initial_info["x_reference"][0],
                 initial_info["x_reference"][2],
                 initial_info["x_reference"][4],
             ]
         )
-        waypoints.append(
+        self.waypoints.append(
             [
                 initial_info["x_reference"][0],
                 initial_info["x_reference"][2] - 0.2,
                 initial_info["x_reference"][4],
             ]
         )
-        waypoints = np.array(waypoints)
+        self.waypoints = np.array(self.waypoints) 
+        print(len(self.waypoints))
 
-        tck, u = interpolate.splprep([waypoints[:, 0], waypoints[:, 1], waypoints[:, 2]], s=0.1)
-        self.waypoints = waypoints
+        tck, u = interpolate.splprep([self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]], s=0.1)
         duration = 12
         t = np.linspace(0, 1, int(duration * self.CTRL_FREQ))
+        self.timesteps = t * duration
         self.ref_x, self.ref_y, self.ref_z = interpolate.splev(t, tck)
+        # Save the reference trajectory to a YAML file
+        self.save_trajectory_to_yaml('reference_path_steps.yaml')
         assert max(self.ref_z) < 2.5, "Drone must stay below the ceiling"
 
         if self.VERBOSE:
@@ -148,6 +153,21 @@ class Controller(BaseController):
         # REPLACE THIS (END) ####
         #########################
 
+    def save_trajectory_to_yaml(self, filename: str):
+        """Save the reference trajectory to a YAML file."""
+        steps = list(range(len(self.waypoints)))
+
+        trajectory_data = {
+            'steps': steps,
+            'ref_x': self.waypoints[:, 0].tolist(),
+            'ref_y': self.waypoints[:, 1].tolist(),
+            'ref_z': self.waypoints[:, 2].tolist(),
+        }
+
+        with open(filename, 'w') as file:
+            yaml.dump(trajectory_data, file)
+
+    #parse the yaml file and save into numpy arrays
     def compute_control(
         self,
         ep_time: float,
@@ -190,6 +210,7 @@ class Controller(BaseController):
         else:
             step = iteration - 2 * self.CTRL_FREQ  # Account for 2s delay due to takeoff
             if ep_time - 2 > 0 and step < len(self.ref_x):
+                #print the timestep at the cooresponding position
                 target_pos = np.array([self.ref_x[step], self.ref_y[step], self.ref_z[step]])
                 #print(f"Step: {step}, Target: {target_pos}")
                 print(f"Current position: {obs[0], obs[2], obs[4]}")

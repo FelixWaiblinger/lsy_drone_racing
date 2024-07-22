@@ -35,8 +35,21 @@ from munch import munchify
 from lsy_drone_racing.controller import BaseController
 from lsy_drone_racing.command import apply_sim_command
 from lsy_drone_racing.constants import FIRMWARE_FREQ
-# from lsy_drone_racing.utils.utils import load_config, load_controller
+# from lsy_drone_racing.utils import load_config, load_controller
+
 from lsy_drone_racing.wrapper import DroneRacingObservationWrapper
+
+import importlib.util
+from typing import TYPE_CHECKING, Type
+
+import sys
+
+import yaml
+
+from munch import munchify
+
+from lsy_drone_racing.controller import BaseController
+
 
 if TYPE_CHECKING:
     from munch import Munch
@@ -78,6 +91,40 @@ def load_config(path: Path) -> Munch:
         return munchify(yaml.safe_load(file))
 
 
+def load_controller(path: Path) -> Type[BaseController]:
+    """Load the controller module from the given path and return the Controller class.
+
+    Args:
+        path: Path to the controller module.
+    """
+    assert path.exists(), f"Controller file not found: {path}"
+    assert path.is_file(), f"Controller path is not a file: {path}"
+    spec = importlib.util.spec_from_file_location("controller", path)
+    controller_module = importlib.util.module_from_spec(spec)
+    sys.modules["controller"] = controller_module
+    spec.loader.exec_module(controller_module)
+    assert hasattr(controller_module, "Controller")
+    assert issubclass(controller_module.Controller, BaseController)
+
+    try:
+        return controller_module.Controller
+    except ImportError as e:
+        raise e
+
+
+def load_config(path: Path) -> Munch:
+    """Load the race config file.
+
+    Args:
+        path: Path to the config file.
+
+    Returns:
+        The munchified config dict.
+    """
+    assert path.exists(), f"Configuration file not found: {path}"
+    with open(path, "r") as file:
+        return munchify(yaml.safe_load(file))
+
 def simulate(
     config: str = "config/level3.yaml",
     controller: str = "examples/ppo_controller.py",
@@ -113,7 +160,8 @@ def simulate(
     # user sends ctrl signals, not the firmware.
     config.quadrotor_config["ctrl_freq"] = FIRMWARE_FREQ
     env_func = partial(make, "quadrotor", **config.quadrotor_config)
-    env = DroneRacingObservationWrapper(make("firmware", env_func, FIRMWARE_FREQ, CTRL_FREQ))
+    env = make("firmware", env_func, FIRMWARE_FREQ, CTRL_FREQ)
+    env = DroneRacingObservationWrapper(env)
 
     # Load the controller module
     path = Path(__file__).parents[1] / controller
@@ -131,6 +179,7 @@ def simulate(
 
     # Run the episodes.
     for _ in range(n_runs):
+        #print(env.reset())
         ep_start = time.time()
         done = False
         action = np.zeros(4)
@@ -221,6 +270,7 @@ def log_episode_stats(stats: dict, info: dict, config: Munch, curr_time: float, 
             f"Gates passed: {stats['gates_passed']}\n"
             f"Total reward: {stats['ep_reward']}\n"
             f"Number of collisions: {stats['collisions']}\n"
+            f"Collided with: {stats['collision_objects']}\n"
             f"Number of constraint violations: {stats['violations']}\n"
         )
     )

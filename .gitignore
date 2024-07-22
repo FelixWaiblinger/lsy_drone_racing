@@ -2,6 +2,7 @@
 build/
 **.egg-info/
 **/__pycache__/
+build/
 submission.csv
 logs
 secrets
@@ -14,4 +15,3 @@ ppo_drones_tensorboard/
 *.svg
 
 !models/*.zip
-!try_kaggle/*.zip

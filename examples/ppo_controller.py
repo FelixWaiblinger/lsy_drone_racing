@@ -59,24 +59,16 @@ class Controller(BaseController):
             buffer_size: Size of the data buffers used in method `learn()`.
             verbose: Turn on and off additional printouts and plots.
         """
-        super().__init__(initial_obs, initial_info, buffer_size, verbose)
-        # Save environment and control parameters.
-        self.CTRL_TIMESTEP = initial_info["ctrl_timestep"]
-        self.CTRL_FREQ = initial_info["ctrl_freq"]
+        super().__init__(initial_obs, initial_info, verbose)
         self.initial_obs = initial_obs
         self.VERBOSE = verbose
-        self.BUFFER_SIZE = buffer_size
-        # Store a priori scenario information.
-        self.NOMINAL_GATES = initial_info["nominal_gates_pos_and_type"]
-        self.NOMINAL_OBSTACLES = initial_info["nominal_obstacles_pos"]
         self._drone_pose = None
         self.action_scale = np.array([1, 1, 1, np.pi])
-        self.state = 0
+        self.model = PPO.load("models/baseline_level3")
 
         # Reset counters and buffers.
         self.reset()
         self.episode_reset()
-        self.model = PPO.load("models/baseline_level3")
 
     def reset(self):
         self._drone_pose = self.initial_obs[[0, 1, 2, 5]]
@@ -111,6 +103,7 @@ class Controller(BaseController):
         # REPLACE THIS (START) ##
         #########################
 
+        # ensure gate positions in observation space (sometimes yaw > pi)
         clip = lambda x, y: np.clip(x, -y, y)
         gate_limit = np.array([5, 5, 5, np.pi])
         obst_limit = np.array([5, 5, 5])
@@ -123,14 +116,15 @@ class Controller(BaseController):
         obs[12:28] = gate_poses.flatten().astype(np.float32)
         obs[32:44] = obst_poses.flatten().astype(np.float32)
         
-        # create full state command
-        zero = np.zeros(3)
+        # predict next goal position (ignore yaw)
         action, _ = self.model.predict(obs, deterministic=True)
         action[3] = 0
         action = self._action_transform(action).astype(float)
+
+        # convert to full state command
+        zero = np.zeros(3)
         command_type = Command.FULLSTATE
         args = [action[:3], zero, zero, action[3], zero, ep_time]
-
 
         #########################
         # REPLACE THIS (END) ####
@@ -162,17 +156,6 @@ class Controller(BaseController):
 
         """
         self._drone_pose = obs[[0, 1, 2, 5]]
-
-    def episode_learn(self):
-        """Learning and controller updates called between episodes.
-
-        INSTRUCTIONS:
-            Use the historically collected information in the five data buffers of actions,
-            observations, rewards, done flags, and information dictionaries to learn, adapt, and/or
-            re-plan.
-
-        """
-        pass
 
     def _action_transform(self, action: np.ndarray) -> np.ndarray:
         """Transform the action to the format expected by the firmware env.
