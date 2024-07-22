@@ -397,10 +397,6 @@ class RewardWrapper(Wrapper):
 
         obs, info = self.env.reset(*args, **kwargs)
 
-        # compatibility with stable baselines3 multiprocessing
-        del info["symbolic_model"]
-        del info["symbolic_constraints"]
-
         # internal state of the reward wrapper
         self.current_gate_id = info["current_gate_id"]
         self.current_target = info["gates_pose"][self.current_gate_id, :3]

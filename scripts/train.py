@@ -11,13 +11,14 @@ import fire
 import yaml
 from munch import munchify
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import EvalCallback
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
+# from stable_baselines3.common.callbacks import EvalCallback
+# from stable_baselines3.common.env_util import make_vec_env
+# from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 
 from safe_control_gym.utils.registration import make
 from lsy_drone_racing.constants import FIRMWARE_FREQ, CTRL_TIMESTEP
-from lsy_drone_racing.wrapper import DroneRacingWrapper, RewardWrapper
+from lsy_drone_racing.wrapper import \
+    DroneRacingWrapper, RewardWrapper, MultiProcessingWrapper
 
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ CONFIG_PATH = "./config/level3.yaml"
 TRAIN_STEPS = 3_000_000
 N_ENVS = 4
 
-# NOTE: abbreviations
+# NOTE: abbreviations for hyperparameter optimization / ablation studies
 # gs            = getting started
 # l3            = level3
 # GOOD  s/m/l   = num iterations on same agent
@@ -44,7 +45,8 @@ N_ENVS = 4
 # GOOD  ns      = n_steps to 4096
 # BAD   rp      = train 10 times for 200k each
 
-def create_race_env(config_path: Path, gui: bool = False) :
+def create_race_env(config_path: Path, gui: bool = False):
+    """Create a wrapped environment for ready for training."""
 
     def env_factory():
         """Create the drone racing environment."""
@@ -64,6 +66,7 @@ def create_race_env(config_path: Path, gui: bool = False) :
         firmware_env = make("firmware", env_factory, FIRMWARE_FREQ, CTRL_FREQ)
         drone_racing_env = DroneRacingWrapper(firmware_env, terminate_on_lap=True)
         drone_racing_env = RewardWrapper(drone_racing_env)
+        drone_racing_env = MultiProcessingWrapper(drone_racing_env)
         return drone_racing_env
     
     # NOTE: uncomment if multiprocessing should be used
@@ -139,7 +142,7 @@ def evaluate():
     path_to_config = Path(__file__).resolve().parents[1] / CONFIG_PATH
     test_env = create_race_env(config_path=path_to_config, gui=True)
     model = PPO.load(SAVE_PATH, test_env)
-    
+
     # NOTE: evaluate a model over 10 episodes of maximum 1000 steps each
     rewards, times = [], []
     for run in range(10):
