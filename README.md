@@ -158,7 +158,7 @@ To implement your own controller, have a look at the [example implementation](./
 
 ## Flying using reinforcement learning
 
-To try out reinforcement learning, select the difficulty level ```scripts/sim.py``` and the baseline model in ```examples/ppo_controller.py```. All models are available ```models/...```
+To try out the reinforcement learning controller, select the difficulty level in ```scripts/sim.py``` and, accordingly, the baseline model in ```examples/ppo_controller.py```. All models are available ```models/...```
   
   ```
   python scripts/sim.py --config config/level3.yaml --controller examples/ppo_controller.py
