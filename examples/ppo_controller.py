@@ -76,8 +76,7 @@ class Controller(BaseController):
         # Reset counters and buffers.
         self.reset()
         self.episode_reset()
-        self.model = PPO.load("try_kaggle/ppo_gs_l3_l_5_next4")
-        # self.model = PPO.load("models/baseline_level3")
+        self.model = PPO.load("models/baseline_level3")
 
     def reset(self):
         self._drone_pose = self.initial_obs[[0, 1, 2, 5]]
@@ -112,11 +111,11 @@ class Controller(BaseController):
         # REPLACE THIS (START) ##
         #########################
 
-        # avoid illegal gate poses
         clip = lambda x, y: np.clip(x, -y, y)
         gate_limit = np.array([5, 5, 5, np.pi])
         obst_limit = np.array([5, 5, 5])
 
+        # avoid illegal gate poses
         gates = obs[12:28].reshape((4,4))
         obsts = obs[32:44].reshape((4,3))
         gate_poses = np.array([clip(gate, gate_limit) for gate in gates])
@@ -124,34 +123,13 @@ class Controller(BaseController):
         obs[12:28] = gate_poses.flatten().astype(np.float32)
         obs[32:44] = obst_poses.flatten().astype(np.float32)
         
-        # state machine
+        # create full state command
         zero = np.zeros(3)
-        self.state = 2 #self._check_state(ep_time, info)
-        # init -> takeoff
-        if self.state == 0:
-            command_type = Command.TAKEOFF
-            args = [0.1, 1]
-        # take off -> wait
-        elif self.state == 1:
-            command_type = Command.NONE
-            args = []
-        # wait -> fly
-        elif self.state == 2:
-            action, _ = self.model.predict(obs, deterministic=True)
-            action[3] = 0
-            action = self._action_transform(action).astype(float)
-            command_type = Command.FULLSTATE
-            args = [action[:3], zero, zero, action[3], zero, ep_time]
-        # fly -> notify
-        elif self.state == 3:
-            command_type = Command.NOTIFYSETPOINTSTOP
-            args = [] # TODO replace by correct
-        elif self.state == 4:
-            command_type = Command.LAND
-            args = [0, 3]
-        else:
-            command_type = Command.NONE
-            args = []
+        action, _ = self.model.predict(obs, deterministic=True)
+        action[3] = 0
+        action = self._action_transform(action).astype(float)
+        command_type = Command.FULLSTATE
+        args = [action[:3], zero, zero, action[3], zero, ep_time]
 
 
         #########################
@@ -208,18 +186,3 @@ class Controller(BaseController):
         action = self._drone_pose + (action * self.action_scale)
         action[3] = map2pi(action[3])  # Ensure yaw is in [-pi, pi]
         return action
-    
-    def _check_state(self, time, info):
-        # print(self.state)
-        if self.state == 0: # initialization state
-            return 1
-        elif self.state == 1 and time < 1: # take off state
-            return 2
-        elif self.state == 2 and time < 5:#info["task_completed"]: # flying state
-            return 3
-        elif self.state == 3: # notify state
-            return 4
-        elif self.state == 4: # landing state
-            return 5
-        else: # finished state
-            return self.state

@@ -10,6 +10,8 @@ saves
 
 ppo_drones_tensorboard/
 *.zip
+*.csv
+*.svg
 
 !models/*.zip
 !try_kaggle/*.zip
